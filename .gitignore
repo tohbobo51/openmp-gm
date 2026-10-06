@@ -17,3 +17,7 @@ extract_dyn/
 # OS specific files
 .DS_Store
 Thumbs.db
+
+# Secrets
+.env
+backend-api/.env

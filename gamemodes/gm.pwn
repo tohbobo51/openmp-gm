@@ -17,9 +17,9 @@
 // 1. KONFIGURASI DATABASE & SERVER (SESUAIKAN DENGAN LEMEHOST ANDA)
 // ========================================================================
 #define MYSQL_HOST          "142.132.203.47"
-#define MYSQL_USER          "u10125_samp"
-#define MYSQL_PASS          "password_db_lemehost_anda"
-#define MYSQL_DATABASE      "s10125_samp"
+#define MYSQL_USER          "u289578_mReRZTCxjz"
+#define MYSQL_PASS          "FroO15LuABiyU=.5^TLCiFhE"
+#define MYSQL_DATABASE      "s289578_db1791315867361"
 #define MYSQL_PORT          3306
 
 // Konfigurasi Server
