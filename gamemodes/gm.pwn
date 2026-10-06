@@ -131,8 +131,8 @@ public OnGameModeInit()
     CEF_RegisterEvent("OnGoogleRegister", "OnGoogleRegisterEvent", Argument_String, Argument_String, Argument_String, Argument_String, Argument_String, Argument_String, Argument_String, Argument_Integer, Argument_Integer);
 
     // Default skins
-    AddPlayerClass(299, DEFAULT_SPAWN_X, DEFAULT_SPAWN_Y, DEFAULT_SPAWN_Z, DEFAULT_SPAWN_A, 0, 0, 0, 0, 0, 0);
-    AddPlayerClass(101, DEFAULT_SPAWN_X, DEFAULT_SPAWN_Y, DEFAULT_SPAWN_Z, DEFAULT_SPAWN_A, 0, 0, 0, 0, 0, 0);
+    AddPlayerClass(299, DEFAULT_SPAWN_X, DEFAULT_SPAWN_Y, DEFAULT_SPAWN_Z, DEFAULT_SPAWN_A, WEAPON_FIST, 0, WEAPON_FIST, 0, WEAPON_FIST, 0);
+    AddPlayerClass(101, DEFAULT_SPAWN_X, DEFAULT_SPAWN_Y, DEFAULT_SPAWN_Z, DEFAULT_SPAWN_A, WEAPON_FIST, 0, WEAPON_FIST, 0, WEAPON_FIST, 0);
     return 1;
 }
 
@@ -301,7 +301,7 @@ public OnGoogleRegisterEvent(playerid, const email[], const googleId[], const uc
     mysql_query(g_SQL, queryUcp);
 
     // Ambil UCP ID yang baru dibuat
-    new ucpId = mysql_insert_id(g_SQL);
+    new ucpId = cache_insert_id();
     if (ucpId == 0)
     {
         // Jika sudah ada sebelumnya, ambil id-nya
