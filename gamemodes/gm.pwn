@@ -1,19 +1,43 @@
 /*
  * ========================================================================
- *                 Vice Side Roleplay - Open.MP Gamemode
+ *         VICE SIDE ROLEPLAY - OPEN.MP GAMEMODE CORE (gm.pwn)
  * ========================================================================
+ * Platform: Open.MP Linux x86 (v1.5.8.3079) / SA-MP Android & PC
+ * Integrasi: CEF (Chromium Embedded Framework) + MySQL Google OAuth 2.0
  * Server IP: 142.132.203.47:10125
- * Developed by: @tohbobo51
- * Core: Open.MP Linux x86 (v1.5.8.3079)
- * CEF Integration: aurora-mp/omp-cef
- * Automated CI/CD: devbluen/openmp-build-action
+ * Developer: @tohbobo51
  * ========================================================================
  */
 
 #include <open.mp>
+#include <a_mysql>
 #include <cef>
 
-// Roleplay Color Definitions
+// ========================================================================
+// 1. KONFIGURASI DATABASE & SERVER (SESUAIKAN DENGAN LEMEHOST ANDA)
+// ========================================================================
+#define MYSQL_HOST          "142.132.203.47"
+#define MYSQL_USER          "u10125_samp"
+#define MYSQL_PASS          "password_db_lemehost_anda"
+#define MYSQL_DATABASE      "s10125_samp"
+#define MYSQL_PORT          3306
+
+// Konfigurasi Server
+#define SERVER_NAME         "Vice Side Roleplay"
+#define SERVER_VERSION      "v1.0.0 Open.MP"
+#define SERVER_HOST         "142.132.203.47:10125"
+
+// Definisi CEF Browser ID
+#define CEF_BROWSER_HUD     1000
+#define CEF_BROWSER_AUTH    1001
+
+// Lokasi Spawn Default (City Hall / Pershing Square Los Santos)
+#define DEFAULT_SPAWN_X     1481.0425
+#define DEFAULT_SPAWN_Y     -1750.0450
+#define DEFAULT_SPAWN_Z     15.4453
+#define DEFAULT_SPAWN_A     0.0
+
+// Definisi Warna
 #define COLOR_WHITE         0xFFFFFFFF
 #define COLOR_GREY          0xAFAFAFAA
 #define COLOR_YELLOW        0xFFFF00AA
@@ -23,30 +47,55 @@
 #define COLOR_RED           0xAA3333AA
 #define COLOR_ORANGE        0xFF9900AA
 
-// Server Configuration Constants
-#define SERVER_NAME         "Vice Side Roleplay"
-#define SERVER_VERSION      "v1.0.0 Open.MP + CEF"
-#define SERVER_HOST         "142.132.203.47:10125"
+// ========================================================================
+// 2. DATA STRUKTUR PLAYER & KARAKTER
+// ========================================================================
+enum E_PLAYER_DATA
+{
+    pUcpId,
+    pGoogleId[64],
+    pGoogleEmail[128],
+    pUcpName[32],
+    pCharacterName[24],
+    pBirthplace[64],
+    pBirthdate[16],
+    pGender[8],
+    pHeight,
+    pWeight,
+    pMoney,
+    pBankMoney,
+    pSkin,
+    Float:pPosX,
+    Float:pPosY,
+    Float:pPosZ,
+    Float:pPosA,
+    pInterior,
+    pVirtualWorld,
+    bool:pLoggedIn,
+    bool:pHasCef
+};
 
-// CEF Browser ID Definitions
-#define CEF_BROWSER_HUD     1000
+new PlayerData[MAX_PLAYERS][E_PLAYER_DATA];
+new MySQL:g_SQL;
 
-// Default Spawn Position (Pershing Square / City Hall, Los Santos)
-#define SPAWN_POS_X         1481.0425
-#define SPAWN_POS_Y         -1750.0450
-#define SPAWN_POS_Z         15.4453
-#define SPAWN_POS_A         0.0
+// Forward deklarasi untuk event receiver CEF
+forward OnGoogleLoginEvent(playerid, const email[], const googleId[], const ucpName[]);
+forward OnGoogleRegisterEvent(playerid, const email[], const googleId[], const ucpName[], const characterName[], const birthplace[], const birthdate[], const gender[], height, weight);
 
-// Player State Variables
-new bool:gPlayerHasCef[MAX_PLAYERS];
+// Forward deklarasi query callback
+forward OnAccountCheckLogin(playerid, const googleId[]);
+forward OnAccountCreated(playerid, ucpId);
 
+// ========================================================================
+// 3. MAIN & GAMEMODE INITIALIZATION
+// ========================================================================
 main()
 {
     print("\n---------------------------------------------------------");
     print("      " SERVER_NAME " (" SERVER_VERSION ")");
-    print("      Server Hosting Address: " SERVER_HOST);
-    print("      CEF Engine: aurora-mp/omp-cef Enabled");
-    print("      Developed by @tohbobo51 | Open.MP Linux x86");
+    print("      Server Hosting: " SERVER_HOST);
+    print("      Google OAuth 2.0 & CEF WebView Active");
+    print("      Developer: @tohbobo51 | Open.MP Linux x86");
     print("---------------------------------------------------------\n");
 }
 
@@ -59,139 +108,286 @@ public OnGameModeInit()
     DisableInteriorEnterExits();
     UsePlayerPedAnims();
 
-    // Register modern CEF Roleplay resource from scriptfiles/cef/roleplay
+    // Inisialisasi Database MySQL
+    new MySQLOpt:options = mysql_init_options();
+    mysql_set_option(options, AUTO_RECONNECT, true);
+
+    g_SQL = mysql_connect(MYSQL_HOST, MYSQL_USER, MYSQL_PASS, MYSQL_DATABASE, options);
+    if (mysql_errno(g_SQL) != 0)
+    {
+        printf("[MYSQL ERROR] Gagal terhubung ke MySQL (%s) Error ID: %d", MYSQL_HOST, mysql_errno(g_SQL));
+    }
+    else
+    {
+        print("[MYSQL SUCCESS] Berhasil terhubung ke database MySQL LemeHost!");
+    }
+
+    // Registrasi Resource CEF (scriptfiles/cef/auth dan scriptfiles/cef/roleplay)
+    CEF_AddResource("auth");
     CEF_AddResource("roleplay");
 
-    // Default civilian classes
-    AddPlayerClass(299, SPAWN_POS_X, SPAWN_POS_Y, SPAWN_POS_Z, SPAWN_POS_A, 0, 0, 0, 0, 0, 0);
-    AddPlayerClass(101, SPAWN_POS_X, SPAWN_POS_Y, SPAWN_POS_Z, SPAWN_POS_A, 0, 0, 0, 0, 0, 0);
-    AddPlayerClass(188, SPAWN_POS_X, SPAWN_POS_Y, SPAWN_POS_Z, SPAWN_POS_A, 0, 0, 0, 0, 0, 0);
+    // Registrasi Event Bridge dari CEF JavaScript ke Pawn
+    CEF_RegisterEvent("OnGoogleLogin", "OnGoogleLoginEvent", Argument_String, Argument_String, Argument_String);
+    CEF_RegisterEvent("OnGoogleRegister", "OnGoogleRegisterEvent", Argument_String, Argument_String, Argument_String, Argument_String, Argument_String, Argument_String, Argument_String, Argument_Integer, Argument_Integer);
 
-    print("[INFO] Vice Side Roleplay with CEF initialized successfully.");
+    // Default skins
+    AddPlayerClass(299, DEFAULT_SPAWN_X, DEFAULT_SPAWN_Y, DEFAULT_SPAWN_Z, DEFAULT_SPAWN_A, 0, 0, 0, 0, 0, 0);
+    AddPlayerClass(101, DEFAULT_SPAWN_X, DEFAULT_SPAWN_Y, DEFAULT_SPAWN_Z, DEFAULT_SPAWN_A, 0, 0, 0, 0, 0, 0);
     return 1;
 }
 
 public OnGameModeExit()
 {
-    print("[INFO] Vice Side Roleplay gamemode unloaded.");
+    if (g_SQL != MYSQL_INVALID_HANDLE)
+    {
+        mysql_close(g_SQL);
+    }
     return 1;
 }
 
+// ========================================================================
+// 4. CEF INITIALIZATION & PLAYER CONNECT
+// ========================================================================
 public OnCefInitialize(playerid, bool:success, E_CEF_INIT_REASON:reason, const message[])
 {
-    gPlayerHasCef[playerid] = success;
+    PlayerData[playerid][pHasCef] = success;
 
     if (success)
     {
-        SendClientMessage(playerid, COLOR_GREEN, "[CEF] Modul Chromium Embedded Framework aktif & terhubung!");
-        // Create custom HTML5 Roleplay HUD
-        CEF_CreateBrowser(playerid, CEF_BROWSER_HUD, "http://cef/roleplay/index.html", false, true, 0.0, 0.0);
+        SendClientMessage(playerid, COLOR_GREEN, "[CEF] WebView siap. Membuka formulir login Google OAuth...");
+        // Buka WebView CEF Login Google secara otomatis (Fokus & kontrol kursor diaktifkan)
+        CEF_CreateBrowser(playerid, CEF_BROWSER_AUTH, "http://cef/auth/index.html", true, true, 0.0, 0.0);
     }
     else
     {
-        SendClientMessage(playerid, COLOR_GREY, "[INFO] Anda bermain menggunakan SA-MP standar tanpa CEF.");
+        SendClientMessage(playerid, COLOR_YELLOW, "[INFO] Perangkat Anda belum memiliki CEF. Bermain dengan mode standar.");
     }
     return 1;
 }
 
 public OnPlayerConnect(playerid)
 {
-    gPlayerHasCef[playerid] = false;
+    // Reset data pemain
+    PlayerData[playerid][pLoggedIn] = false;
+    PlayerData[playerid][pHasCef] = false;
+    PlayerData[playerid][pMoney] = 500;
+    PlayerData[playerid][pSkin] = 299;
 
-    new playerName[MAX_PLAYER_NAME], str[144];
-    GetPlayerName(playerid, playerName, sizeof(playerName));
-
-    // Welcome player to server
     SendClientMessage(playerid, COLOR_LIGHTBLUE, "==========================================================");
-    format(str, sizeof(str), "Selamat datang {FFFFFF}%s {33CCFF}di {FF9900}" SERVER_NAME "!", playerName);
-    SendClientMessage(playerid, COLOR_LIGHTBLUE, str);
-    SendClientMessage(playerid, COLOR_WHITE, "Server berjalan di platform {FFBB00}Open.MP Linux v1.5.8.3079 + CEF{FFFFFF}.");
-    SendClientMessage(playerid, COLOR_GREY, "Gunakan {FFFFFF}/help {AFAFAF}untuk melihat daftar perintah roleplay.");
+    SendClientMessage(playerid, COLOR_WHITE, "Selamat datang di {FF9900}" SERVER_NAME "{FFFFFF}!");
+    SendClientMessage(playerid, COLOR_GREY, "Sistem pendaftaran & login terintegrasi dengan Google OAuth 2.0.");
     SendClientMessage(playerid, COLOR_LIGHTBLUE, "==========================================================");
-
-    format(str, sizeof(str), "{AFAFAF}[SERVER] {FFFFFF}%s {AFAFAF}bergabung ke server.", playerName);
-    SendClientMessageToAll(COLOR_GREY, str);
     return 1;
 }
 
 public OnPlayerDisconnect(playerid, reason)
 {
-    if (gPlayerHasCef[playerid])
+    if (PlayerData[playerid][pHasCef])
     {
+        CEF_DestroyBrowser(playerid, CEF_BROWSER_AUTH);
         CEF_DestroyBrowser(playerid, CEF_BROWSER_HUD);
     }
-    gPlayerHasCef[playerid] = false;
-
-    new playerName[MAX_PLAYER_NAME], str[128];
-    GetPlayerName(playerid, playerName, sizeof(playerName));
-    format(str, sizeof(str), "{AFAFAF}[SERVER] {FFFFFF}%s {AFAFAF}meninggalkan server.", playerName);
-    SendClientMessageToAll(COLOR_GREY, str);
+    PlayerData[playerid][pLoggedIn] = false;
     return 1;
 }
 
-public OnPlayerSpawn(playerid)
+// ========================================================================
+// 5. EVENT RECEIVER: LOGIN GOOGLE
+// ========================================================================
+public OnGoogleLoginEvent(playerid, const email[], const googleId[], const ucpName[])
 {
-    SetPlayerInterior(playerid, 0);
-    SetPlayerVirtualWorld(playerid, 0);
-    SetPlayerPos(playerid, SPAWN_POS_X, SPAWN_POS_Y, SPAWN_POS_Z);
-    SetPlayerFacingAngle(playerid, SPAWN_POS_A);
-    SetCameraBehindPlayer(playerid);
+    printf("[LOGIN] Menerima event Google Login untuk ID: %s (Email: %s)", googleId, email);
 
-    GivePlayerMoney(playerid, 500);
-    SetPlayerHealth(playerid, 100.0);
-    SetPlayerArmour(playerid, 0.0);
+    format(PlayerData[playerid][pGoogleEmail], 128, "%s", email);
+    format(PlayerData[playerid][pGoogleId], 64, "%s", googleId);
+    format(PlayerData[playerid][pUcpName], 32, "%s", ucpName);
 
-    SendClientMessage(playerid, COLOR_GREEN, "[SPAWN] Anda telah spawn di pusat kota Los Santos (City Hall).");
+    // Query ke MySQL untuk mengambil data karakter
+    new query[320];
+    mysql_format(g_SQL, query, sizeof(query), 
+        "SELECT c.*, u.id as ucp_account_id FROM characters c INNER JOIN ucp_accounts u ON c.ucp_id = u.id WHERE u.google_id = '%e' LIMIT 1;", 
+        googleId
+    );
+    mysql_tquery(g_SQL, query, "OnAccountCheckLogin", "ds", playerid, googleId);
+    return 1;
+}
 
-    // Sync stats with CEF HUD if connected
-    if (gPlayerHasCef[playerid])
+public OnAccountCheckLogin(playerid, const googleId[])
+{
+    new rows = cache_num_rows();
+    if (rows > 0)
     {
+        // Ambil data karakter dari database
+        cache_get_value_name_int(0, "ucp_account_id", PlayerData[playerid][pUcpId]);
+        cache_get_value_name(0, "character_name", PlayerData[playerid][pCharacterName], 24);
+        cache_get_value_name(0, "birthplace", PlayerData[playerid][pBirthplace], 64);
+        cache_get_value_name(0, "birthdate", PlayerData[playerid][pBirthdate], 16);
+        cache_get_value_name(0, "gender", PlayerData[playerid][pGender], 8);
+        cache_get_value_name_int(0, "height", PlayerData[playerid][pHeight]);
+        cache_get_value_name_int(0, "weight", PlayerData[playerid][pWeight]);
+        cache_get_value_name_int(0, "money", PlayerData[playerid][pMoney]);
+        cache_get_value_name_int(0, "skin", PlayerData[playerid][pSkin]);
+        cache_get_value_name_float(0, "pos_x", PlayerData[playerid][pPosX]);
+        cache_get_value_name_float(0, "pos_y", PlayerData[playerid][pPosY]);
+        cache_get_value_name_float(0, "pos_z", PlayerData[playerid][pPosZ]);
+        cache_get_value_name_float(0, "pos_a", PlayerData[playerid][pPosA]);
+        cache_get_value_name_int(0, "interior", PlayerData[playerid][pInterior]);
+        cache_get_value_name_int(0, "virtual_world", PlayerData[playerid][pVirtualWorld]);
+
+        PlayerData[playerid][pLoggedIn] = true;
+
+        // Ubah nama pemain di dalam server menjadi Nama IC
+        SetPlayerName(playerid, PlayerData[playerid][pCharacterName]);
+
+        // Berikan uang dan skin
+        ResetPlayerMoney(playerid);
+        GivePlayerMoney(playerid, PlayerData[playerid][pMoney]);
+        SetPlayerSkin(playerid, PlayerData[playerid][pSkin]);
+
+        // Hancurkan WebView login
+        if (PlayerData[playerid][pHasCef])
+        {
+            CEF_DestroyBrowser(playerid, CEF_BROWSER_AUTH);
+            // Buat HUD Roleplay
+            CEF_CreateBrowser(playerid, CEF_BROWSER_HUD, "http://cef/roleplay/index.html", false, true, 0.0, 0.0);
+            CEF_EmitEvent(playerid, CEF_BROWSER_HUD, "updateStats", CEF_INT(PlayerData[playerid][pMoney]), CEF_FLOAT(100.0), CEF_FLOAT(0.0));
+        }
+
+        // Spawn pemain ke posisi tersimpan
+        SpawnPlayer(playerid);
+
+        new welcomeMsg[128];
+        format(welcomeMsg, sizeof(welcomeMsg), "{33CCFF}[LOGIN SUCCESS] Selamat datang kembali, {FFFFFF}%s {33CCFF}(UCP: %s)!", PlayerData[playerid][pCharacterName], PlayerData[playerid][pUcpName]);
+        SendClientMessage(playerid, COLOR_LIGHTBLUE, welcomeMsg);
+    }
+    else
+    {
+        SendClientMessage(playerid, COLOR_YELLOW, "[INFO] Akun Google Anda belum memiliki karakter IC. Silakan isi form di layar.");
+    }
+    return 1;
+}
+
+// ========================================================================
+// 6. EVENT RECEIVER: REGISTER GOOGLE & KARAKTER IC
+// ========================================================================
+public OnGoogleRegisterEvent(playerid, const email[], const googleId[], const ucpName[], const characterName[], const birthplace[], const birthdate[], const gender[], height, weight)
+{
+    printf("[REGISTER] Pembuatan karakter baru: %s (UCP: %s, Asal: %s)", characterName, ucpName, birthplace);
+
+    // Simpan ke struct lokal
+    format(PlayerData[playerid][pGoogleEmail], 128, "%s", email);
+    format(PlayerData[playerid][pGoogleId], 64, "%s", googleId);
+    format(PlayerData[playerid][pUcpName], 32, "%s", ucpName);
+    format(PlayerData[playerid][pCharacterName], 24, "%s", characterName);
+    format(PlayerData[playerid][pBirthplace], 64, "%s", birthplace);
+    format(PlayerData[playerid][pBirthdate], 16, "%s", birthdate);
+    format(PlayerData[playerid][pGender], 8, "%s", gender);
+    PlayerData[playerid][pHeight] = height;
+    PlayerData[playerid][pWeight] = weight;
+    PlayerData[playerid][pMoney] = 500;
+    PlayerData[playerid][pSkin] = (!strcmp(gender, "Female", true)) ? 193 : 299; // Skin default sesuai gender
+    PlayerData[playerid][pPosX] = DEFAULT_SPAWN_X;
+    PlayerData[playerid][pPosY] = DEFAULT_SPAWN_Y;
+    PlayerData[playerid][pPosZ] = DEFAULT_SPAWN_Z;
+    PlayerData[playerid][pPosA] = DEFAULT_SPAWN_A;
+    PlayerData[playerid][pLoggedIn] = true;
+
+    // 1. Insert atau Update UCP Account ke MySQL
+    new queryUcp[320];
+    mysql_format(g_SQL, queryUcp, sizeof(queryUcp),
+        "INSERT INTO ucp_accounts (google_id, google_email, ucp_name) VALUES ('%e', '%e', '%e') ON DUPLICATE KEY UPDATE ucp_name = '%e';",
+        googleId, email, ucpName, ucpName
+    );
+    mysql_query(g_SQL, queryUcp);
+
+    // Ambil UCP ID yang baru dibuat
+    new ucpId = mysql_insert_id(g_SQL);
+    if (ucpId == 0)
+    {
+        // Jika sudah ada sebelumnya, ambil id-nya
+        new fetchQuery[200];
+        mysql_format(g_SQL, fetchQuery, sizeof(fetchQuery), "SELECT id FROM ucp_accounts WHERE google_id = '%e' LIMIT 1;", googleId);
+        new Cache:result = mysql_query(g_SQL, fetchQuery);
+        if (cache_num_rows() > 0)
+        {
+            cache_get_value_name_int(0, "id", ucpId);
+        }
+        cache_delete(result);
+    }
+    PlayerData[playerid][pUcpId] = ucpId;
+
+    // 2. Insert Karakter Baru ke Tabel characters
+    new queryChar[500];
+    mysql_format(g_SQL, queryChar, sizeof(queryChar),
+        "INSERT INTO characters (ucp_id, character_name, birthplace, birthdate, gender, height, weight, money, skin, pos_x, pos_y, pos_z, pos_a) \
+         VALUES (%d, '%e', '%e', '%e', '%e', %d, %d, 500, %d, %.4f, %.4f, %.4f, %.4f);",
+        ucpId, characterName, birthplace, birthdate, gender, height, weight, PlayerData[playerid][pSkin],
+        DEFAULT_SPAWN_X, DEFAULT_SPAWN_Y, DEFAULT_SPAWN_Z, DEFAULT_SPAWN_A
+    );
+    mysql_query(g_SQL, queryChar);
+
+    // Set nama pemain di dalam server menjadi Nama Karakter IC baru
+    SetPlayerName(playerid, characterName);
+
+    // Berikan modal awal
+    ResetPlayerMoney(playerid);
+    GivePlayerMoney(playerid, 500);
+    SetPlayerSkin(playerid, PlayerData[playerid][pSkin]);
+
+    // Hancurkan WebView login
+    if (PlayerData[playerid][pHasCef])
+    {
+        CEF_DestroyBrowser(playerid, CEF_BROWSER_AUTH);
+        // Buat HUD Roleplay
+        CEF_CreateBrowser(playerid, CEF_BROWSER_HUD, "http://cef/roleplay/index.html", false, true, 0.0, 0.0);
         CEF_EmitEvent(playerid, CEF_BROWSER_HUD, "updateStats", CEF_INT(500), CEF_FLOAT(100.0), CEF_FLOAT(0.0));
     }
+
+    // Spawn ke titik awal Los Santos
+    SpawnPlayer(playerid);
+
+    new msg[144];
+    format(msg, sizeof(msg), "{33AA33}[REGISTER SUCCESS] Selamat datang di Vice Side, {FFFFFF}%s {33AA33}(Uang Awal: $500, Asal: %s)!", characterName, birthplace);
+    SendClientMessage(playerid, COLOR_GREEN, msg);
     return 1;
 }
 
-public OnPlayerDeath(playerid, killerid, WEAPON:reason)
+// ========================================================================
+// 7. SPAWN HANDLER & ROLEPLAY COMMANDS
+// ========================================================================
+public OnPlayerSpawn(playerid)
 {
-    SendClientMessage(playerid, COLOR_RED, "[KEMATIAN] Anda telah pingsan / tewas. Respawn dalam beberapa detik...");
+    SetPlayerInterior(playerid, PlayerData[playerid][pInterior]);
+    SetPlayerVirtualWorld(playerid, PlayerData[playerid][pVirtualWorld]);
+    SetPlayerPos(playerid, PlayerData[playerid][pPosX], PlayerData[playerid][pPosY], PlayerData[playerid][pPosZ]);
+    SetPlayerFacingAngle(playerid, PlayerData[playerid][pPosA]);
+    SetCameraBehindPlayer(playerid);
+    SetPlayerSkin(playerid, PlayerData[playerid][pSkin]);
     return 1;
-}
-
-public OnPlayerRequestClass(playerid, classid)
-{
-    SetPlayerPos(playerid, 1481.0, -1745.0, 15.5);
-    SetPlayerCameraPos(playerid, 1481.0, -1740.0, 16.0);
-    SetPlayerCameraLookAt(playerid, 1481.0, -1745.0, 15.5);
-    return 1;
-}
-
-// Roleplay Chat & Commands
-public OnPlayerText(playerid, text[])
-{
-    new playerName[MAX_PLAYER_NAME], formattedChat[160];
-    GetPlayerName(playerid, playerName, sizeof(playerName));
-
-    format(formattedChat, sizeof(formattedChat), "%s berkata: %s", playerName, text);
-    SendClientMessage(playerid, COLOR_WHITE, formattedChat);
-
-    new Float:px, Float:py, Float:pz;
-    GetPlayerPos(playerid, px, py, pz);
-
-    for (new i = 0; i < MAX_PLAYERS; i++)
-    {
-        if (IsPlayerConnected(i) && i != playerid)
-        {
-            if (IsPlayerInRangeOfPoint(i, 25.0, px, py, pz))
-            {
-                SendClientMessage(i, COLOR_WHITE, formattedChat);
-            }
-        }
-    }
-    return 0;
 }
 
 public OnPlayerCommandText(playerid, cmdtext[])
 {
+    if (!strcmp(cmdtext, "/stats", true))
+    {
+        if (!PlayerData[playerid][pLoggedIn])
+        {
+            SendClientMessage(playerid, COLOR_RED, "[ERROR] Anda belum login!");
+            return 1;
+        }
+
+        new str[144];
+        SendClientMessage(playerid, COLOR_ORANGE, "========== STATISTIK KARAKTER ==========");
+        format(str, sizeof(str), "Nama IC: %s | UCP: %s | Asal: %s", PlayerData[playerid][pCharacterName], PlayerData[playerid][pUcpName], PlayerData[playerid][pBirthplace]);
+        SendClientMessage(playerid, COLOR_WHITE, str);
+        format(str, sizeof(str), "Gender: %s | Lahir: %s | Tinggi: %d cm | Berat: %d kg", PlayerData[playerid][pGender], PlayerData[playerid][pBirthdate], PlayerData[playerid][pHeight], PlayerData[playerid][pWeight]);
+        SendClientMessage(playerid, COLOR_WHITE, str);
+        format(str, sizeof(str), "Uang: $%d | Skin ID: %d", GetPlayerMoney(playerid), GetPlayerSkin(playerid));
+        SendClientMessage(playerid, COLOR_WHITE, str);
+        SendClientMessage(playerid, COLOR_ORANGE, "=========================================");
+        return 1;
+    }
+
     if (!strcmp(cmdtext, "/me", true, 3))
     {
         if (strlen(cmdtext) <= 4)
@@ -242,79 +438,12 @@ public OnPlayerCommandText(playerid, cmdtext[])
         return 1;
     }
 
-    if (!strcmp(cmdtext, "/b", true, 2))
-    {
-        if (strlen(cmdtext) <= 3)
-        {
-            SendClientMessage(playerid, COLOR_GREY, "Gunakan: /b [pesan OOC]");
-            return 1;
-        }
-
-        new playerName[MAX_PLAYER_NAME], str[160];
-        GetPlayerName(playerid, playerName, sizeof(playerName));
-        format(str, sizeof(str), "(( [OOC] %s: %s ))", playerName, cmdtext[3]);
-
-        new Float:px, Float:py, Float:pz;
-        GetPlayerPos(playerid, px, py, pz);
-
-        for (new i = 0; i < MAX_PLAYERS; i++)
-        {
-            if (IsPlayerConnected(i) && IsPlayerInRangeOfPoint(i, 25.0, px, py, pz))
-            {
-                SendClientMessage(i, COLOR_GREY, str);
-            }
-        }
-        return 1;
-    }
-
     if (!strcmp(cmdtext, "/help", true))
     {
         SendClientMessage(playerid, COLOR_LIGHTBLUE, "--- Perintah Vice Side Roleplay ---");
-        SendClientMessage(playerid, COLOR_WHITE, "/me [aksi] - Melakukan tindakan roleplay karakter");
-        SendClientMessage(playerid, COLOR_WHITE, "/do [keadaan] - Mendeskripsikan lingkungan atau respon");
-        SendClientMessage(playerid, COLOR_WHITE, "/b [chat] - Obrolan Out Of Character (OOC) lokal");
-        SendClientMessage(playerid, COLOR_WHITE, "/stats - Melihat status karakter dan uang");
-        SendClientMessage(playerid, COLOR_WHITE, "/cefhud - Toggle CEF web browser HUD");
-        SendClientMessage(playerid, COLOR_WHITE, "/hostinfo - Melihat informasi koneksi hosting & IP server");
-        return 1;
-    }
-
-    if (!strcmp(cmdtext, "/cefhud", true))
-    {
-        if (!gPlayerHasCef[playerid])
-        {
-            SendClientMessage(playerid, COLOR_YELLOW, "[CEF] Klien Anda belum terpasang omp-cef plugin.");
-            return 1;
-        }
-
-        CEF_ReloadBrowser(playerid, CEF_BROWSER_HUD, true);
-        SendClientMessage(playerid, COLOR_GREEN, "[CEF] Memuat ulang tampilan Roleplay HUD.");
-        return 1;
-    }
-
-    if (!strcmp(cmdtext, "/stats", true))
-    {
-        new Float:health, Float:armour, str[128];
-        GetPlayerHealth(playerid, health);
-        GetPlayerArmour(playerid, armour);
-
-        SendClientMessage(playerid, COLOR_ORANGE, "--- Statistik Karakter ---");
-        format(str, sizeof(str), "Uang: $%d | HP: %.0f | Armor: %.0f", GetPlayerMoney(playerid), health, armour);
-        SendClientMessage(playerid, COLOR_WHITE, str);
-
-        if (gPlayerHasCef[playerid])
-        {
-            CEF_EmitEvent(playerid, CEF_BROWSER_HUD, "updateStats", CEF_INT(GetPlayerMoney(playerid)), CEF_FLOAT(health), CEF_FLOAT(armour));
-        }
-        return 1;
-    }
-
-    if (!strcmp(cmdtext, "/hostinfo", true))
-    {
-        SendClientMessage(playerid, COLOR_LIGHTBLUE, "--- Informasi Server Hosting ---");
-        SendClientMessage(playerid, COLOR_WHITE, "Alamat IP: " SERVER_HOST);
-        SendClientMessage(playerid, COLOR_WHITE, "Core Engine: Open.MP Linux x86 v1.5.8.3079 + CEF");
-        SendClientMessage(playerid, COLOR_WHITE, "Developer: @tohbobo51 (Vice Side Roleplay)");
+        SendClientMessage(playerid, COLOR_WHITE, "/stats - Melihat statistik karakter IC & data kelahiran");
+        SendClientMessage(playerid, COLOR_WHITE, "/me [aksi] - Melakukan tindakan roleplay");
+        SendClientMessage(playerid, COLOR_WHITE, "/do [keadaan] - Mendeskripsikan lingkungan sekitar");
         return 1;
     }
 
