@@ -2,9 +2,9 @@
     "announce": true,
     "artwork": {
         "cdn": "",
-        "enable": true,
+        "enable": false,
         "models_path": "models",
-        "port": 7777,
+        "port": 10125,
         "web_server_bind": ""
     },
     "banners": {
@@ -19,15 +19,15 @@
     "enable_query": true,
     "game": {
         "allow_interior_weapons": true,
-        "chat_radius": 200.0,
+        "chat_radius": 200,
         "death_drop_amount": 0,
         "gravity": 0.00800000037997961,
         "group_player_objects": false,
         "lag_compensation_mode": 1,
-        "map": "",
-        "mode": "",
-        "nametag_draw_radius": 70.0,
-        "player_marker_draw_radius": 250.0,
+        "map": "San Andreas",
+        "mode": "Vice Side Roleplay v1.0",
+        "nametag_draw_radius": 70,
+        "player_marker_draw_radius": 250,
         "player_marker_mode": 1,
         "time": 12,
         "use_all_animations": true,
@@ -46,7 +46,7 @@
         "vehicle_respawn_time": 10000,
         "weather": 10
     },
-    "language": "",
+    "language": "Bahasa Indonesia",
     "logging": {
         "enable": true,
         "file": "log.txt",
@@ -77,15 +77,15 @@
         "message_hole_limit": 3000,
         "messages_limit": 500,
         "minimum_connection_time": 0,
-        "minimum_send_bits_per_second": 96000.0,
+        "minimum_send_bits_per_second": 96000,
         "mtu": 576,
         "multiplier": 10,
         "on_foot_sync_rate": 30,
         "player_marker_sync_rate": 2500,
         "player_timeout": 10000,
-        "port": 7777,
-        "public_addr": "",
-        "stream_radius": 200.0,
+        "port": 10125,
+        "public_addr": "142.132.203.47",
+        "stream_radius": 200,
         "stream_rate": 1000,
         "time_sync_rate": 30000,
         "use_lan_mode": false,
@@ -113,7 +113,7 @@
         "enable": false,
         "password": "changeme1"
     },
-    "sleep": 5.0,
+    "sleep": 5,
     "use_dyn_ticks": true,
     "website": "open.mp"
 }
