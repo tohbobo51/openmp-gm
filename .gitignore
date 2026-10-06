@@ -1,0 +1,19 @@
+# Logs & runtime caches
+*.log
+log.txt
+server_log.txt
+omp-server.log
+
+# Temporary build folders
+deploy_win/
+deploy_linux/
+deploy_linux_dyn/
+omp-compiler/
+compiler.zip
+extract_std/
+extract_dyn/
+*.tar.gz
+
+# OS specific files
+.DS_Store
+Thumbs.db

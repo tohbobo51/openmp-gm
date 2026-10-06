@@ -1,0 +1,48 @@
+name: Build and Deploy Open.MP Gamemode
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Gamemode using Custom Action
+        uses: devbluen/openmp-build-action@v3
+        with:
+          gamemode_name: 'main'
+          omp_version: 'v1.5.8.3079'
+          include_path: 'qawno/include'
+          core_libs: 'amxsscanf libmariadb log-core'
+          core_config: 'config.json'
+          extra_data_folders: 'scriptfiles'
+
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-windows
+          path: deploy_win/
+          if-no-files-found: warn
+
+      - name: Upload Linux Standard Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-linux-standard
+          path: deploy_linux/
+          if-no-files-found: warn
+
+      - name: Upload Linux Dynamic Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-linux-dynamic
+          path: deploy_linux_dyn/
+          if-no-files-found: warn
