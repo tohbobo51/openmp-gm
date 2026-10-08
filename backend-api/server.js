@@ -7,6 +7,7 @@ const mysql = require('mysql2/promise');
 const { OAuth2Client } = require('google-auth-library');
 const { rateLimit } = require('express-rate-limit');
 const { createGameTicket, sha256Hex, isGoogleNonce } = require('./auth-ticket');
+const { validateRegistration } = require('./registration');
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -120,7 +121,8 @@ app.post('/auth/google/mobile', mobileAuthLimiter, async (req, res) => {
     return sendCode(res, 401, 'INVALID_GOOGLE_TOKEN');
   }
 
-  if (!payload || !payload.sub || !payload.email
+  if (!payload || typeof payload.sub !== 'string' || !payload.sub
+      || typeof payload.email !== 'string' || !payload.email || payload.email.length > 128
       || payload.email_verified !== true || payload.nonce !== nonce
       || !Number.isFinite(Number(payload.exp))) {
     return sendCode(res, 401, 'INVALID_GOOGLE_TOKEN');
@@ -142,19 +144,90 @@ app.post('/auth/google/mobile', mobileAuthLimiter, async (req, res) => {
       'SELECT id, ucp_name FROM ucp_accounts WHERE google_id = ? LIMIT 1',
       [String(payload.sub)]
     );
-    if (accounts.length === 0) {
-      await connection.rollback();
-      return sendCode(res, 403, 'ACCOUNT_NOT_FOUND');
+    let account = accounts[0] || null;
+    let registration = null;
+
+    if (!account) {
+      if (!req.body.registration) {
+        await connection.rollback();
+        return sendCode(res, 403, 'REGISTRATION_REQUIRED');
+      }
+      const checked = validateRegistration(req.body.registration, { requireUcpName: true });
+      if (!checked.ok) {
+        await connection.rollback();
+        return sendCode(res, 400, checked.code);
+      }
+      registration = checked.value;
+
+      // Never silently link an existing UCP account by email alone.
+      const [emailAccounts] = await connection.execute(
+        'SELECT id FROM ucp_accounts WHERE LOWER(google_email) = LOWER(?) LIMIT 1',
+        [String(payload.email).toLowerCase()]
+      );
+      if (emailAccounts.length > 0) {
+        await connection.rollback();
+        return sendCode(res, 409, 'ACCOUNT_LINK_REQUIRED');
+      }
+
+      const [ucpNames] = await connection.execute(
+        'SELECT id FROM ucp_accounts WHERE LOWER(ucp_name) = LOWER(?) LIMIT 1',
+        [registration.ucpName]
+      );
+      if (ucpNames.length > 0) {
+        await connection.rollback();
+        return sendCode(res, 409, 'UCP_NAME_TAKEN');
+      }
+
+      const [characterNames] = await connection.execute(
+        'SELECT id FROM characters WHERE LOWER(character_name) = LOWER(?) LIMIT 1',
+        [registration.characterName]
+      );
+      if (characterNames.length > 0) {
+        await connection.rollback();
+        return sendCode(res, 409, 'CHARACTER_NAME_TAKEN');
+      }
+
+      const [accountResult] = await connection.execute(
+        'INSERT INTO ucp_accounts (google_id, google_email, ucp_name) VALUES (?, ?, ?)',
+        [String(payload.sub), String(payload.email).toLowerCase(), registration.ucpName]
+      );
+      account = { id: accountResult.insertId, ucp_name: registration.ucpName };
     }
 
-    const account = accounts[0];
-    const [characters] = await connection.execute(
+    let [characters] = await connection.execute(
       'SELECT id, character_name FROM characters WHERE ucp_id = ? ORDER BY id ASC LIMIT 1',
       [account.id]
     );
+
     if (characters.length === 0) {
-      await connection.rollback();
-      return sendCode(res, 409, 'CHARACTER_NOT_FOUND');
+      if (!req.body.registration) {
+        await connection.rollback();
+        return sendCode(res, 409, 'CHARACTER_REGISTRATION_REQUIRED');
+      }
+      const checked = validateRegistration(req.body.registration, { requireUcpName: false });
+      if (!checked.ok) {
+        await connection.rollback();
+        return sendCode(res, 400, checked.code);
+      }
+      registration = checked.value;
+
+      const [characterNames] = await connection.execute(
+        'SELECT id FROM characters WHERE LOWER(character_name) = LOWER(?) LIMIT 1',
+        [registration.characterName]
+      );
+      if (characterNames.length > 0) {
+        await connection.rollback();
+        return sendCode(res, 409, 'CHARACTER_NAME_TAKEN');
+      }
+
+      const [characterResult] = await connection.execute(
+        `INSERT INTO characters
+          (ucp_id, character_name, birthplace, birthdate, gender, height, weight)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [account.id, registration.characterName, registration.birthplace,
+          registration.birthdate, registration.gender, registration.height, registration.weight]
+      );
+      characters = [{ id: characterResult.insertId, character_name: registration.characterName }];
     }
 
     // Store only one-way hashes. A Google ID token can be exchanged once,
@@ -185,7 +258,10 @@ app.post('/auth/google/mobile', mobileAuthLimiter, async (req, res) => {
       }
     }
     if (error && error.code === 'ER_DUP_ENTRY') {
-      return sendCode(res, 409, 'GOOGLE_TOKEN_REPLAYED');
+      if (String(error.message || '').includes('uq_auth_login_tickets_id_token')) {
+        return sendCode(res, 409, 'GOOGLE_TOKEN_REPLAYED');
+      }
+      return sendCode(res, 409, 'REGISTRATION_CONFLICT');
     }
     console.error('[native-google-auth] request failed:',
       error && (error.code || error.name) || 'unknown');
