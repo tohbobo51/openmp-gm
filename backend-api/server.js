@@ -7,7 +7,7 @@ const mysql = require('mysql2/promise');
 const { OAuth2Client } = require('google-auth-library');
 const { rateLimit } = require('express-rate-limit');
 const { createGameTicket, sha256Hex, isGoogleNonce } = require('./auth-ticket');
-const { validateRegistration } = require('./registration');
+const { validateRegistration, DEFAULT_FIRST_SPAWN } = require('./registration');
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
@@ -222,10 +222,13 @@ app.post('/auth/google/mobile', mobileAuthLimiter, async (req, res) => {
 
       const [characterResult] = await connection.execute(
         `INSERT INTO characters
-          (ucp_id, character_name, birthplace, birthdate, gender, height, weight)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          (ucp_id, character_name, birthplace, birthdate, gender, height, weight,
+           pos_x, pos_y, pos_z, pos_a, interior, virtual_world)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [account.id, registration.characterName, registration.birthplace,
-          registration.birthdate, registration.gender, registration.height, registration.weight]
+          registration.birthdate, registration.gender, registration.height, registration.weight,
+          DEFAULT_FIRST_SPAWN.x, DEFAULT_FIRST_SPAWN.y, DEFAULT_FIRST_SPAWN.z,
+          DEFAULT_FIRST_SPAWN.angle, DEFAULT_FIRST_SPAWN.interior, DEFAULT_FIRST_SPAWN.virtualWorld]
       );
       characters = [{ id: characterResult.insertId, character_name: registration.characterName }];
     }
