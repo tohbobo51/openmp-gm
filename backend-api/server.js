@@ -1,159 +1,206 @@
-const express = require('express');
-const cors = require('cors');
-const axios = require('axios');
-const mysql = require('mysql2/promise');
+'use strict';
+
 require('dotenv').config();
 
+const express = require('express');
+const mysql = require('mysql2/promise');
+const { OAuth2Client } = require('google-auth-library');
+const { rateLimit } = require('express-rate-limit');
+const { createGameTicket, sha256Hex, isGoogleNonce } = require('./auth-ticket');
+
 const app = express();
-app.use(cors());
-app.use(express.json());
+const PORT = Number(process.env.PORT || 3000);
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_WEB_CLIENT_ID || '';
+const googleClient = new OAuth2Client();
 
-const PORT = process.env.PORT || 3000;
+const dbConfig = {
+  host: process.env.DB_HOST,
+  port: Number(process.env.DB_PORT || 3306),
+  user: process.env.DB_USER,
+  password: process.env.DB_PASS,
+  database: process.env.DB_NAME,
+};
+const hasDatabaseConfig = Boolean(
+  dbConfig.host && dbConfig.user && dbConfig.password && dbConfig.database
+);
+const db = hasDatabaseConfig
+  ? mysql.createPool({
+      ...dbConfig,
+      waitForConnections: true,
+      connectionLimit: 5,
+      queueLimit: 0,
+      timezone: 'Z',
+      charset: 'utf8mb4',
+    })
+  : null;
 
-// Database Connection Pool (LemeHost)
-const db = mysql.createPool({
-    host: process.env.DB_HOST || '142.132.203.47',
-    port: process.env.DB_PORT || 3306,
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASS || '',
-    database: process.env.DB_NAME || 'samp',
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
+app.use(express.json({ limit: '16kb', type: 'application/json' }));
+
+const mobileAuthLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 12,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { code: 'RATE_LIMITED' },
 });
 
-// 1. Endpoint Awal Login Google OAuth
-app.get('/auth/google', (req, res) => {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    const redirectUri = process.env.GOOGLE_CALLBACK_URL;
-    const scope = encodeURIComponent('openid email profile');
-    
-    // Redirect ke Google Accounts OAuth consent screen
-    const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&access_type=offline&prompt=select_account`;
-    
-    res.redirect(googleAuthUrl);
-});
-
-// 2. Endpoint Callback Google OAuth
-app.get('/auth/google/callback', async (req, res) => {
-    const { code } = req.query;
-    
-    if (!code) {
-        return res.status(400).send('Authorization code tidak ditemukan.');
-    }
-
-    try {
-        // Exchange authorization code dengan access token
-        const tokenResponse = await axios.post('https://oauth2.googleapis.com/token', {
-            code,
-            client_id: process.env.GOOGLE_CLIENT_ID,
-            client_secret: process.env.GOOGLE_CLIENT_SECRET,
-            redirect_uri: process.env.GOOGLE_CALLBACK_URL,
-            grant_type: 'authorization_code'
-        });
-
-        const { access_token } = tokenResponse.data;
-
-        // Ambil profil user dari Google Userinfo API
-        const profileResponse = await axios.get('https://www.googleapis.com/oauth2/v2/userinfo', {
-            headers: { Authorization: `Bearer ${access_token}` }
-        });
-
-        const googleUser = profileResponse.data;
-        const googleId = googleUser.id;
-        const email = googleUser.email;
-        // Sanitasi display name untuk UCP Name (hanya alfanumerik)
-        const rawName = (googleUser.name || email.split('@')[0]).replace(/[^a-zA-Z0-9]/g, '');
-        const ucpName = rawName.substring(0, 20) || `UCP${googleId.substring(0, 6)}`;
-
-        // Cek apakah UCP sudah terdaftar di MySQL
-        const [ucpRows] = await db.query(
-            'SELECT * FROM ucp_accounts WHERE google_id = ? LIMIT 1',
-            [googleId]
-        );
-
-        let status = 'REGISTER';
-        let character = null;
-
-        if (ucpRows.length > 0) {
-            const ucp = ucpRows[0];
-            // Cek apakah karakter IC sudah dibuat
-            const [charRows] = await db.query(
-                'SELECT * FROM characters WHERE ucp_id = ? LIMIT 1',
-                [ucp.id]
-            );
-
-            if (charRows.length > 0) {
-                status = 'LOGIN';
-                character = charRows[0];
-            } else {
-                status = 'REGISTER';
-            }
-        }
-
-        // Return HTML respon yang langsung berkomunikasi dengan CEF Browser di dalam game
-        const clientPayload = {
-            status,
-            email,
-            googleId,
-            ucpName,
-            characterName: character ? character.character_name : ''
-        };
-
-        res.send(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="utf-8">
-                <title>Google Auth Complete</title>
-                <style>
-                    body { font-family: sans-serif; background: #09090b; color: #fff; text-align: center; padding: 40px; }
-                    .card { background: #18181b; padding: 25px; border-radius: 12px; max-width: 400px; margin: auto; }
-                    .success { color: #22c55e; font-weight: bold; }
-                </style>
-            </head>
-            <body>
-                <div class="card">
-                    <p class="success">Autentikasi Google Berhasil!</p>
-                    <p>Menghubungkan ke game...</p>
-                </div>
-                <script>
-                    const data = ${JSON.stringify(clientPayload)};
-                    
-                    // Jika di dalam WebView game open.mp CEF
-                    if (window.cef) {
-                        if (data.status === "LOGIN") {
-                            cef.emit("OnGoogleLogin", data.email, data.googleId, data.ucpName);
-                        } else {
-                            // Buka form registrasi karakter IC
-                            window.location.href = "http://cef/auth/index.html?step=register&email=" + encodeURIComponent(data.email) + "&googleId=" + encodeURIComponent(data.googleId) + "&ucpName=" + encodeURIComponent(data.ucpName);
-                        }
-                    } else if (window.opener) {
-                        window.opener.postMessage(data, "*");
-                        window.close();
-                    } else {
-                        // Fallback redirect ke file CEF lokal
-                        window.location.href = "http://cef/auth/index.html?step=" + data.status.toLowerCase() + "&email=" + encodeURIComponent(data.email) + "&googleId=" + encodeURIComponent(data.googleId) + "&ucpName=" + encodeURIComponent(data.ucpName);
-                    }
-                </script>
-            </body>
-            </html>
-        `);
-
-    } catch (err) {
-        console.error('Error Google OAuth Callback:', err.response?.data || err.message);
-        res.status(500).send(`<h3>Gagal melakukan verifikasi Google:</h3><p>${err.message}</p>`);
-    }
-});
-
-app.get('/', (req, res) => {
-    res.json({
-        status: 'online',
-        service: 'Vice Side Roleplay - Open.MP Google OAuth API',
-        endpoints: ['/auth/google', '/auth/google/callback']
+let ticketTableReady;
+async function ensureTicketTable() {
+  if (!db) {
+    throw new Error('database_not_configured');
+  }
+  if (!ticketTableReady) {
+    ticketTableReady = db.query(`
+      CREATE TABLE IF NOT EXISTS auth_login_tickets (
+        ticket_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+        id_token_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+        ucp_id INT NOT NULL,
+        character_id INT NOT NULL,
+        expires_at DATETIME(3) NOT NULL,
+        id_token_expires_at DATETIME(3) NOT NULL,
+        consumed_at DATETIME(3) NULL,
+        created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        PRIMARY KEY (ticket_hash),
+        UNIQUE KEY uq_auth_login_tickets_id_token (id_token_hash),
+        KEY idx_auth_login_tickets_expiry (expires_at),
+        KEY idx_auth_login_tickets_character (character_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `).catch((error) => {
+      ticketTableReady = null;
+      throw error;
     });
+  }
+  await ticketTableReady;
+}
+
+function sendCode(res, status, code) {
+  return res.status(status).json({ code });
+}
+
+app.get('/', (_req, res) => {
+  res.json({
+    status: 'online',
+    service: 'Vice Side Roleplay native Google auth API',
+    nativeAuthReady: Boolean(GOOGLE_CLIENT_ID && hasDatabaseConfig),
+    endpoints: ['POST /auth/google/mobile'],
+  });
 });
 
-app.listen(PORT, () => {
-    console.log(`Backend Auth API running on port ${PORT}`);
+// Disable the old CEF flow: it returned client-supplied Google IDs without
+// server-side ID-token verification and must not be used for game login.
+app.all(['/auth/google', '/auth/google/callback'], (_req, res) => {
+  res.status(410).json({ code: 'LEGACY_CEF_AUTH_DISABLED' });
 });
+
+app.post('/auth/google/mobile', mobileAuthLimiter, async (req, res) => {
+  if (!GOOGLE_CLIENT_ID) {
+    return sendCode(res, 503, 'GOOGLE_CLIENT_NOT_CONFIGURED');
+  }
+  if (!hasDatabaseConfig || !db) {
+    return sendCode(res, 503, 'DATABASE_NOT_CONFIGURED');
+  }
+
+  const idToken = req.body && req.body.idToken;
+  const nonce = req.body && req.body.nonce;
+  if (typeof idToken !== 'string' || idToken.length < 100 || idToken.length > 8192
+      || !isGoogleNonce(nonce)) {
+    return sendCode(res, 400, 'INVALID_AUTH_REQUEST');
+  }
+
+  let payload;
+  try {
+    const verified = await googleClient.verifyIdToken({
+      idToken,
+      audience: GOOGLE_CLIENT_ID,
+    });
+    payload = verified.getPayload();
+  } catch (_error) {
+    return sendCode(res, 401, 'INVALID_GOOGLE_TOKEN');
+  }
+
+  if (!payload || !payload.sub || !payload.email
+      || payload.email_verified !== true || payload.nonce !== nonce
+      || !Number.isFinite(Number(payload.exp))) {
+    return sendCode(res, 401, 'INVALID_GOOGLE_TOKEN');
+  }
+
+  const idTokenHash = sha256Hex(idToken);
+  const rawTicket = createGameTicket();
+  const ticketHash = sha256Hex(rawTicket);
+  const idTokenExpiresAt = new Date(Number(payload.exp) * 1000);
+  const ticketExpiresAt = new Date(Date.now() + 90 * 1000);
+  let connection;
+
+  try {
+    await ensureTicketTable();
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    const [accounts] = await connection.execute(
+      'SELECT id, ucp_name FROM ucp_accounts WHERE google_id = ? LIMIT 1',
+      [String(payload.sub)]
+    );
+    if (accounts.length === 0) {
+      await connection.rollback();
+      return sendCode(res, 403, 'ACCOUNT_NOT_FOUND');
+    }
+
+    const account = accounts[0];
+    const [characters] = await connection.execute(
+      'SELECT id, character_name FROM characters WHERE ucp_id = ? ORDER BY id ASC LIMIT 1',
+      [account.id]
+    );
+    if (characters.length === 0) {
+      await connection.rollback();
+      return sendCode(res, 409, 'CHARACTER_NOT_FOUND');
+    }
+
+    // Store only one-way hashes. A Google ID token can be exchanged once,
+    // even if its game ticket later expires or is consumed.
+    await connection.execute(
+      'DELETE FROM auth_login_tickets WHERE id_token_expires_at <= UTC_TIMESTAMP(3)'
+    );
+    await connection.execute(
+      `INSERT INTO auth_login_tickets
+        (ticket_hash, id_token_hash, ucp_id, character_id, expires_at, id_token_expires_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [ticketHash, idTokenHash, account.id, characters[0].id, ticketExpiresAt, idTokenExpiresAt]
+    );
+
+    await connection.commit();
+    return res.status(200).json({
+      ok: true,
+      loginName: `AUTH${rawTicket}`,
+      characterName: characters[0].character_name,
+      expiresAt: ticketExpiresAt.toISOString(),
+    });
+  } catch (error) {
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch (_rollbackError) {
+        // Do not expose database credentials, token data, or driver details.
+      }
+    }
+    if (error && error.code === 'ER_DUP_ENTRY') {
+      return sendCode(res, 409, 'GOOGLE_TOKEN_REPLAYED');
+    }
+    console.error('[native-google-auth] request failed:',
+      error && (error.code || error.name) || 'unknown');
+    return sendCode(res, 503, 'AUTH_SERVICE_UNAVAILABLE');
+  } finally {
+    if (connection) {
+      connection.release();
+    }
+  }
+});
+
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Native Google auth API listening on port ${PORT}`);
+  });
+}
+
+module.exports = app;

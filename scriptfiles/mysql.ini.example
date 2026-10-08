@@ -1,0 +1,10 @@
+; Salin file ini menjadi scriptfiles/mysql.ini di host open.mp.
+; Isi host, user, dan password baru yang sudah dirotasi. Jangan commit mysql.ini.
+hostname = 127.0.0.1
+username = YOUR_DATABASE_USER
+password = REPLACE_WITH_ROTATED_DATABASE_PASSWORD
+database = YOUR_DATABASE_NAME
+server_port = 3306
+auto_reconnect = true
+multi_statements = true
+pool_size = 3

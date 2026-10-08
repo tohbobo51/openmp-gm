@@ -1,69 +1,66 @@
-# Open.MP Linux Server Gamemode Package
+# Vice Side Roleplay — Open.MP Gamemode
 
-Open.MP Gamemode Server package for Linux x86 (v1.5.8.3079) with automated GitHub Actions compilation & packaging using [`devbluen/openmp-build-action`](https://github.com/devbluen/openmp-build-action).
+Paket gamemode Open.MP Linux dengan kompilasi dan packaging melalui GitHub Actions (`devbluen/openmp-build-action`). Repository ini juga memuat API autentikasi Google dan skema MySQL.
 
-Developed by [@tohbobo51](https://github.com/tohbobo51).
+## Isi utama
 
----
+- `gamemodes/gm.pwn` — gamemode utama.
+- `backend-api/` — API Node.js untuk autentikasi Google native.
+- `database/schema.sql` — tabel akun, karakter, dan tiket sesi.
+- `scriptfiles/mysql.ini.example` — contoh konfigurasi MySQL privat.
+- `.github/workflows/` — alur build Open.MP.
 
-## 🚀 Features
+## Alur login native
 
-- **Open.MP Core**: Based on official release `v1.5.8.3079` (`open.mp-linux-x86.tar.gz`).
-- **Automated CI/CD**: Every push to `main` triggers `.github/workflows/openmp-build.yml` via `devbluen/openmp-build-action@v3`.
-- **Pre-configured Includes**: Full `qawno/include/` headers including `<open.mp>`, `a_players`, `a_vehicles`, `a_objects`, etc.
-- **Artifact Generation**: Automatically compiles `gamemodes/main.pwn` into `main.amx` and exports:
-  - Windows Deployment (`build-windows`)
-  - Linux Standard Deployment (`build-linux-standard`)
-  - Linux Dynamic Deployment (`build-linux-dynamic`)
+1. Launcher Android meminta ID token melalui Google Credential Manager dan membuat nonce acak.
+2. Launcher mengirim ID token dan nonce melalui HTTPS ke `POST /auth/google/mobile`.
+3. API memverifikasi tanda tangan token, audience (`GOOGLE_CLIENT_ID`), email terverifikasi, expiry, dan nonce; API hanya menerima akun UCP dan karakter yang sudah ada.
+4. API membuat tiket acak sekali pakai yang berlaku 90 detik. Database hanya menyimpan hash SHA-256 tiket dan hash ID token.
+5. Launcher menghubungkan game dengan nickname sementara `AUTH` + tiket. Gamemode mengklaim tiket sekali pakai di MySQL, lalu mengganti nickname ke karakter yang terikat pada tiket.
 
----
+ID token Google tidak dikirim ke gamemode/MySQL, tidak dicatat ke Logcat, dan tidak disimpan oleh launcher. Endpoint OAuth lama berbasis CEF dinonaktifkan karena menerima Google ID dari sisi client tanpa verifikasi token server-side.
 
-## 📁 Repository Structure
+## Konfigurasi API
 
-```
-├── .github/workflows/
-│   └── openmp-build.yml      # CI/CD workflow with devbluen/openmp-build-action
-├── components/               # Open.MP server component shared objects (.so)
-├── gamemodes/
-│   ├── main.pwn              # Primary Open.MP gamemode script
-│   ├── derby.pwn             # Example Derby gamemode
-│   ├── gungame.pwn           # Example Gungame gamemode
-│   └── simpletdm.pwn         # Example Team Deathmatch gamemode
-├── qawno/
-│   └── include/              # Open.MP Pawn headers & include library
-├── filterscripts/            # Server filterscripts
-├── scriptfiles/              # Data persistence, configs & logs
-├── models/                   # Custom server artworks / CDN models
-├── config.json               # Open.MP server configuration
-├── bans.json                 # Ban storage
-└── omp-server                # Native Linux executable binary
-```
+Salin `backend-api/.env.example` menjadi `.env` untuk pengembangan lokal, lalu isi variabel melalui penyimpanan rahasia host deployment (misalnya Vercel):
 
----
+- `GOOGLE_CLIENT_ID` — **Web application OAuth client ID**, bukan Android client ID. Web client dan Android client harus berada di Google Cloud project yang sama.
+- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASS`, `DB_NAME` — koneksi database.
 
-## 🛠️ Running Locally on Linux VPS / Lemehost
+Jangan commit `.env`, password database, client secret, maupun `scriptfiles/mysql.ini`. API ini tidak lagi memakai Google client secret atau callback browser. `auth_login_tickets` dibuat otomatis oleh API; skema yang sama juga tersedia di `database/schema.sql`.
 
-1. Give execution permission to the server binary:
+Hak akses database API perlu mencakup `SELECT` pada `ucp_accounts` dan `characters`, serta `CREATE`, `SELECT`, `INSERT`, dan `DELETE` pada tabel tiket. Gamemode membutuhkan `SELECT` dan `UPDATE` untuk mengklaim tiket, selain akses tabel gameplay yang sudah digunakan.
+
+## Konfigurasi launcher Android
+
+Build client memerlukan variabel build-time berikut:
+
+- `GOOGLE_WEB_CLIENT_ID` — Web application OAuth client ID yang sama persis dengan `GOOGLE_CLIENT_ID` backend.
+- `AUTH_API_BASE_URL` — base URL API; default source saat ini `https://openmp-gm.vercel.app`.
+
+OAuth Android client di Google Cloud juga harus cocok dengan package name dan SHA-1 sertifikat release yang dipakai APK. Jangan simpan Google client secret di APK.
+
+## Konfigurasi Open.MP dan database
+
+1. Rotasi password MySQL jika sebelumnya pernah tersimpan pada file contoh/config yang masuk Git.
+2. Di server, salin `scriptfiles/mysql.ini.example` menjadi `scriptfiles/mysql.ini`, lalu isi host, username, password baru, database, dan port. File `mysql.ini` aktif di-ignore oleh Git.
+3. Pastikan server Open.MP dan API dapat mengakses database yang sama; batasi akses database ke host yang diperlukan.
+4. Pastikan tabel `ucp_accounts` dan `characters` tersedia dan akun Google telah memiliki karakter.
+5. Jalankan server:
    ```bash
    chmod +x omp-server
-   ```
-
-2. Start the Open.MP server:
-   ```bash
    ./omp-server --config config.json
    ```
 
-3. To run in background:
-   ```bash
-   nohup ./omp-server > server.log 2>&1 &
-   ```
+**Pendaftaran akun/karakter baru belum tersedia dalam alur launcher native ini.** Login hanya berhasil untuk akun yang sudah tercatat pada `ucp_accounts` dengan karakter pada `characters`; user tanpa karakter ditolak dan perlu bantuan administrator sampai alur registrasi native ditambahkan.
 
----
+## Build
 
-## ⚙️ Building via GitHub Actions
+Push ke branch `main` menjalankan workflow build gamemode. Workflow menghasilkan deployment Windows, Linux standard, dan Linux dynamic sebagai artifacts. Build API lokal:
 
-GitHub Actions automatically builds your gamemode on every commit. You can also trigger a manual build anytime from the **Actions** tab:
-
-1. Go to **Actions** -> **Build and Deploy Open.MP Gamemode**
-2. Click **Run workflow**
-3. Once completed, download the generated artifacts (`build-windows`, `build-linux-standard`, `build-linux-dynamic`).
+```bash
+cd backend-api
+npm ci
+npm test
+npm start
+```
