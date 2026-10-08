@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateRegistration, validBirthdate } = require('../registration');
+const { validateRegistration, validBirthdate, DEFAULT_FIRST_SPAWN } = require('../registration');
 
 const valid = {
   ucpName: 'Budi_Online',
@@ -11,6 +11,17 @@ const valid = {
   birthdate: '1998-05-14',
   gender: 'Male',
 };
+
+test('new characters start at Los Santos International Airport', () => {
+  assert.deepEqual(DEFAULT_FIRST_SPAWN, {
+    x: 1687.3070,
+    y: -2243.3049,
+    z: 13.5469,
+    angle: 90.0,
+    interior: 0,
+    virtualWorld: 0,
+  });
+});
 
 test('accepts valid first-account registration and applies character defaults', () => {
   const result = validateRegistration(valid);

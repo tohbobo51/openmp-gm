@@ -26,11 +26,11 @@
 #define CEF_BROWSER_HUD     1000
 #define CEF_BROWSER_AUTH    1001
 
-// Lokasi Spawn Default (City Hall / Pershing Square Los Santos)
-#define DEFAULT_SPAWN_X     1481.0425
-#define DEFAULT_SPAWN_Y     -1750.0450
-#define DEFAULT_SPAWN_Z     15.4453
-#define DEFAULT_SPAWN_A     0.0
+// Lokasi spawn awal: area terminal Bandara Internasional Los Santos.
+#define DEFAULT_SPAWN_X     1687.3070
+#define DEFAULT_SPAWN_Y     -2243.3049
+#define DEFAULT_SPAWN_Z     13.5469
+#define DEFAULT_SPAWN_A     90.0
 
 // Definisi Warna
 #define COLOR_WHITE         0xFFFFFFFF

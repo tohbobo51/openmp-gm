@@ -3,6 +3,7 @@
 const UCP_NAME_RE = /^[A-Za-z][A-Za-z0-9_]{1,29}[A-Za-z0-9]$/;
 const CHARACTER_NAME_RE = /^[A-Za-z]{2,12}_[A-Za-z]{2,12}$/;
 const BIRTHPLACE_RE = /^[A-Za-z][A-Za-z .,'-]{1,62}$/;
+const DEFAULT_FIRST_SPAWN = Object.freeze({ x: 1687.3070, y: -2243.3049, z: 13.5469, angle: 90.0, interior: 0, virtualWorld: 0 });
 
 function text(value) {
   return typeof value === 'string' ? value.trim() : '';
@@ -58,4 +59,4 @@ function validateRegistration(input, { requireUcpName = true } = {}) {
   };
 }
 
-module.exports = { validateRegistration, validBirthdate };
+module.exports = { validateRegistration, validBirthdate, DEFAULT_FIRST_SPAWN };

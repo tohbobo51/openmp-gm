@@ -31,10 +31,11 @@ CREATE TABLE IF NOT EXISTS `characters` (
     `money` INT NOT NULL DEFAULT 500,
     `bank_money` INT NOT NULL DEFAULT 1000,
     `skin` INT NOT NULL DEFAULT 299,
-    `pos_x` FLOAT NOT NULL DEFAULT 1481.0425,
-    `pos_y` FLOAT NOT NULL DEFAULT -1750.0450,
-    `pos_z` FLOAT NOT NULL DEFAULT 15.4453,
-    `pos_a` FLOAT NOT NULL DEFAULT 0.0,
+    -- Spawn awal: area terminal Bandara Internasional Los Santos.
+    `pos_x` FLOAT NOT NULL DEFAULT 1687.3070,
+    `pos_y` FLOAT NOT NULL DEFAULT -2243.3049,
+    `pos_z` FLOAT NOT NULL DEFAULT 13.5469,
+    `pos_a` FLOAT NOT NULL DEFAULT 90.0,
     `interior` INT NOT NULL DEFAULT 0,
     `virtual_world` INT NOT NULL DEFAULT 0,
 
