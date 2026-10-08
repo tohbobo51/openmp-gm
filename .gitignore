@@ -21,3 +21,5 @@ Thumbs.db
 # Secrets
 .env
 backend-api/.env
+backend-api/node_modules/
+scriptfiles/mysql.ini

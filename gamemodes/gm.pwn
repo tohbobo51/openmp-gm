@@ -16,11 +16,6 @@
 // ========================================================================
 // 1. KONFIGURASI DATABASE & SERVER (SESUAIKAN DENGAN LEMEHOST ANDA)
 // ========================================================================
-#define MYSQL_HOST          "142.132.203.47"
-#define MYSQL_USER          "u289578_mReRZTCxjz"
-#define MYSQL_PASS          "FroO15LuABiyU=.5^TLCiFhE"
-#define MYSQL_DATABASE      "s289578_db1791315867361"
-#define MYSQL_PORT          3306
 
 // Konfigurasi Server
 #define SERVER_NAME         "Vice Side Roleplay"
@@ -79,11 +74,8 @@ new PlayerData[MAX_PLAYERS][E_PLAYER_DATA];
 new MySQL:g_SQL;
 
 // Forward deklarasi untuk event receiver CEF
-forward OnGoogleLoginEvent(playerid, const email[], const googleId[], const ucpName[]);
-forward OnGoogleRegisterEvent(playerid, const email[], const googleId[], const ucpName[], const characterName[], const birthplace[], const birthdate[], const gender[], height, weight);
 
 // Forward deklarasi query callback
-forward OnAccountCheckLogin(playerid, const googleId[]);
 forward OnAccountCreated(playerid, ucpId);
 
 // ========================================================================
@@ -112,10 +104,10 @@ public OnGameModeInit()
     new MySQLOpt:options = mysql_init_options();
     mysql_set_option(options, AUTO_RECONNECT, true);
 
-    g_SQL = mysql_connect(MYSQL_HOST, MYSQL_USER, MYSQL_PASS, MYSQL_DATABASE, options);
+    g_SQL = mysql_connect_file("scriptfiles/mysql.ini");
     if (mysql_errno(g_SQL) != 0)
     {
-        printf("[MYSQL ERROR] Gagal terhubung ke MySQL (%s) Error ID: %d", MYSQL_HOST, mysql_errno(g_SQL));
+        printf("[MYSQL ERROR] mysql_connect_file(\"scriptfiles/mysql.ini\") failed. Error ID: %d", mysql_errno(g_SQL));
     }
     else
     {
@@ -127,8 +119,6 @@ public OnGameModeInit()
     CEF_AddResource("roleplay");
 
     // Registrasi Event Bridge dari CEF JavaScript ke Pawn
-    CEF_RegisterEvent("OnGoogleLogin", "OnGoogleLoginEvent", Argument_String, Argument_String, Argument_String);
-    CEF_RegisterEvent("OnGoogleRegister", "OnGoogleRegisterEvent", Argument_String, Argument_String, Argument_String, Argument_String, Argument_String, Argument_String, Argument_String, Argument_Integer, Argument_Integer);
 
     // Default skins
     AddPlayerClass(299, DEFAULT_SPAWN_X, DEFAULT_SPAWN_Y, DEFAULT_SPAWN_Z, DEFAULT_SPAWN_A, WEAPON_FIST, 0, WEAPON_FIST, 0, WEAPON_FIST, 0);
@@ -151,23 +141,27 @@ public OnGameModeExit()
 public OnCefInitialize(playerid, bool:success, E_CEF_INIT_REASON:reason, const message[])
 {
     PlayerData[playerid][pHasCef] = success;
-
     if (success)
     {
-        SendClientMessage(playerid, COLOR_GREEN, "[CEF] WebView siap. Membuka formulir login Google OAuth...");
-        // Buka WebView CEF Login Google secara otomatis (Fokus & kontrol kursor diaktifkan)
-        CEF_CreateBrowser(playerid, CEF_BROWSER_AUTH, "http://cef/auth/index.html", true, true, 0.0, 0.0);
+        if (PlayerData[playerid][pLoggedIn])
+        {
+            CEF_CreateBrowser(playerid, CEF_BROWSER_HUD, "http://cef/roleplay/index.html", false, true, 0.0, 0.0);
+            CEF_EmitEvent(playerid, CEF_BROWSER_HUD, "updateStats", CEF_INT(PlayerData[playerid][pMoney]), CEF_FLOAT(100.0), CEF_FLOAT(0.0));
+        }
+        else
+        {
+            SendClientMessage(playerid, COLOR_YELLOW, "[LOGIN] Gunakan launcher dan login Google sebelum masuk ke server.");
+        }
     }
     else
     {
-        SendClientMessage(playerid, COLOR_YELLOW, "[INFO] Perangkat Anda belum memiliki CEF. Bermain dengan mode standar.");
+        SendClientMessage(playerid, COLOR_YELLOW, "[INFO] CEF tidak tersedia; login tetap dilakukan melalui launcher.");
     }
     return 1;
 }
 
 public OnPlayerConnect(playerid)
 {
-    // Reset data pemain
     PlayerData[playerid][pLoggedIn] = false;
     PlayerData[playerid][pHasCef] = false;
     PlayerData[playerid][pMoney] = 500;
@@ -175,8 +169,37 @@ public OnPlayerConnect(playerid)
 
     SendClientMessage(playerid, COLOR_LIGHTBLUE, "==========================================================");
     SendClientMessage(playerid, COLOR_WHITE, "Selamat datang di {FF9900}" SERVER_NAME "{FFFFFF}!");
-    SendClientMessage(playerid, COLOR_GREY, "Sistem pendaftaran & login terintegrasi dengan Google OAuth 2.0.");
+    SendClientMessage(playerid, COLOR_GREY, "Login Google harus dilakukan dari launcher resmi.");
     SendClientMessage(playerid, COLOR_LIGHTBLUE, "==========================================================");
+
+    new playerName[MAX_PLAYER_NAME + 1];
+    new loginTicket[17];
+    GetPlayerName(playerid, playerName, sizeof(playerName));
+    if (strlen(playerName) != 20 || strcmp(playerName, "AUTH", false, 4) != 0)
+    {
+        SendClientMessage(playerid, COLOR_RED, "[LOGIN] Tiket launcher tidak ditemukan atau sudah kedaluwarsa.");
+        SetTimerEx("KickUnauthenticatedPlayer", 1200, false, "d", playerid);
+        return 1;
+    }
+
+    strmid(loginTicket, playerName, 4, 20, sizeof(loginTicket));
+    for (new i = 0; i < 16; i++)
+    {
+        new ch = loginTicket[i];
+        if (!((ch >= 'A' && ch <= 'Z' && ch != 'I' && ch != 'O') || (ch >= '2' && ch <= '9')))
+        {
+            SendClientMessage(playerid, COLOR_RED, "[LOGIN] Format tiket tidak valid.");
+            SetTimerEx("KickUnauthenticatedPlayer", 1200, false, "d", playerid);
+            return 1;
+        }
+    }
+
+    new query[512];
+    mysql_format(g_SQL, query, sizeof(query),
+        "UPDATE auth_login_tickets SET consumed_at = UTC_TIMESTAMP(3) WHERE ticket_hash = LOWER(SHA2('%e', 256)) AND consumed_at IS NULL AND expires_at > UTC_TIMESTAMP(3) LIMIT 1;",
+        loginTicket
+    );
+    mysql_tquery(g_SQL, query, "OnAuthTicketClaimed", "ds", playerid, loginTicket);
     return 1;
 }
 
@@ -184,40 +207,63 @@ public OnPlayerDisconnect(playerid, reason)
 {
     if (PlayerData[playerid][pHasCef])
     {
-        CEF_DestroyBrowser(playerid, CEF_BROWSER_AUTH);
         CEF_DestroyBrowser(playerid, CEF_BROWSER_HUD);
     }
     PlayerData[playerid][pLoggedIn] = false;
     return 1;
 }
 
-// ========================================================================
-// 5. EVENT RECEIVER: LOGIN GOOGLE
-// ========================================================================
-public OnGoogleLoginEvent(playerid, const email[], const googleId[], const ucpName[])
+forward OnAuthTicketClaimed(playerid, const loginTicket[]);
+forward KickUnauthenticatedPlayer(playerid);
+forward OnAccountCheckLogin(playerid, const loginTicket[]);
+
+public OnAuthTicketClaimed(playerid, const loginTicket[])
 {
-    printf("[LOGIN] Menerima event Google Login untuk ID: %s (Email: %s)", googleId, email);
+    if (!IsPlayerConnected(playerid)) return 1;
+    if (cache_affected_rows() != 1)
+    {
+        SendClientMessage(playerid, COLOR_RED, "[LOGIN] Tiket tidak valid, sudah dipakai, atau kedaluwarsa.");
+        SetTimerEx("KickUnauthenticatedPlayer", 1200, false, "d", playerid);
+        return 1;
+    }
 
-    format(PlayerData[playerid][pGoogleEmail], 128, "%s", email);
-    format(PlayerData[playerid][pGoogleId], 64, "%s", googleId);
-    format(PlayerData[playerid][pUcpName], 32, "%s", ucpName);
+    new playerName[MAX_PLAYER_NAME + 1];
+    new expectedName[21];
+    format(expectedName, sizeof(expectedName), "AUTH%s", loginTicket);
+    GetPlayerName(playerid, playerName, sizeof(playerName));
+    if (strcmp(playerName, expectedName, false) != 0) return 1;
 
-    // Query ke MySQL untuk mengambil data karakter
-    new query[320];
-    mysql_format(g_SQL, query, sizeof(query), 
-        "SELECT c.*, u.id as ucp_account_id FROM characters c INNER JOIN ucp_accounts u ON c.ucp_id = u.id WHERE u.google_id = '%e' LIMIT 1;", 
-        googleId
+    new query[768];
+    mysql_format(g_SQL, query, sizeof(query),
+        "SELECT c.*, u.id AS ucp_account_id, u.google_email, u.google_id, u.ucp_name FROM auth_login_tickets t INNER JOIN ucp_accounts u ON u.id = t.ucp_id INNER JOIN characters c ON c.id = t.character_id AND c.ucp_id = u.id WHERE t.ticket_hash = LOWER(SHA2('%e', 256)) AND t.consumed_at IS NOT NULL AND t.expires_at > UTC_TIMESTAMP(3) LIMIT 1;",
+        loginTicket
     );
-    mysql_tquery(g_SQL, query, "OnAccountCheckLogin", "ds", playerid, googleId);
+    mysql_tquery(g_SQL, query, "OnAccountCheckLogin", "ds", playerid, loginTicket);
     return 1;
 }
 
-public OnAccountCheckLogin(playerid, const googleId[])
+public KickUnauthenticatedPlayer(playerid)
 {
+    if (IsPlayerConnected(playerid)) Kick(playerid);
+    return 1;
+}
+
+public OnAccountCheckLogin(playerid, const loginTicket[])
+{
+    if (!IsPlayerConnected(playerid)) return 1;
+    new playerName[MAX_PLAYER_NAME + 1];
+    new expectedName[21];
+    format(expectedName, sizeof(expectedName), "AUTH%s", loginTicket);
+    GetPlayerName(playerid, playerName, sizeof(playerName));
+    if (strcmp(playerName, expectedName, false) != 0) return 1;
+
     new rows = cache_num_rows();
     if (rows > 0)
     {
-        // Ambil data karakter dari database
+        cache_get_value_name(0, "google_email", PlayerData[playerid][pGoogleEmail], 128);
+        cache_get_value_name(0, "google_id", PlayerData[playerid][pGoogleId], 64);
+        cache_get_value_name(0, "ucp_name", PlayerData[playerid][pUcpName], 32);
+        // Ambil data karakter yang terikat pada tiket sesi.
         cache_get_value_name_int(0, "ucp_account_id", PlayerData[playerid][pUcpId]);
         cache_get_value_name(0, "character_name", PlayerData[playerid][pCharacterName], 24);
         cache_get_value_name(0, "birthplace", PlayerData[playerid][pBirthplace], 64);
@@ -247,7 +293,6 @@ public OnAccountCheckLogin(playerid, const googleId[])
         // Hancurkan WebView login
         if (PlayerData[playerid][pHasCef])
         {
-            CEF_DestroyBrowser(playerid, CEF_BROWSER_AUTH);
             // Buat HUD Roleplay
             CEF_CreateBrowser(playerid, CEF_BROWSER_HUD, "http://cef/roleplay/index.html", false, true, 0.0, 0.0);
             CEF_EmitEvent(playerid, CEF_BROWSER_HUD, "updateStats", CEF_INT(PlayerData[playerid][pMoney]), CEF_FLOAT(100.0), CEF_FLOAT(0.0));
@@ -262,7 +307,8 @@ public OnAccountCheckLogin(playerid, const googleId[])
     }
     else
     {
-        SendClientMessage(playerid, COLOR_YELLOW, "[INFO] Akun Google Anda belum memiliki karakter IC. Silakan isi form di layar.");
+        SendClientMessage(playerid, COLOR_RED, "[LOGIN] Karakter tidak ditemukan. Hubungi administrator server.");
+        SetTimerEx("KickUnauthenticatedPlayer", 1500, false, "d", playerid);
     }
     return 1;
 }
@@ -270,93 +316,27 @@ public OnAccountCheckLogin(playerid, const googleId[])
 // ========================================================================
 // 6. EVENT RECEIVER: REGISTER GOOGLE & KARAKTER IC
 // ========================================================================
-public OnGoogleRegisterEvent(playerid, const email[], const googleId[], const ucpName[], const characterName[], const birthplace[], const birthdate[], const gender[], height, weight)
+// Native launcher registration is intentionally not exposed through CEF.
+
+public OnPlayerRequestSpawn(playerid)
 {
-    printf("[REGISTER] Pembuatan karakter baru: %s (UCP: %s, Asal: %s)", characterName, ucpName, birthplace);
-
-    // Simpan ke struct lokal
-    format(PlayerData[playerid][pGoogleEmail], 128, "%s", email);
-    format(PlayerData[playerid][pGoogleId], 64, "%s", googleId);
-    format(PlayerData[playerid][pUcpName], 32, "%s", ucpName);
-    format(PlayerData[playerid][pCharacterName], 24, "%s", characterName);
-    format(PlayerData[playerid][pBirthplace], 64, "%s", birthplace);
-    format(PlayerData[playerid][pBirthdate], 16, "%s", birthdate);
-    format(PlayerData[playerid][pGender], 8, "%s", gender);
-    PlayerData[playerid][pHeight] = height;
-    PlayerData[playerid][pWeight] = weight;
-    PlayerData[playerid][pMoney] = 500;
-    PlayerData[playerid][pSkin] = (!strcmp(gender, "Female", true)) ? 193 : 299; // Skin default sesuai gender
-    PlayerData[playerid][pPosX] = DEFAULT_SPAWN_X;
-    PlayerData[playerid][pPosY] = DEFAULT_SPAWN_Y;
-    PlayerData[playerid][pPosZ] = DEFAULT_SPAWN_Z;
-    PlayerData[playerid][pPosA] = DEFAULT_SPAWN_A;
-    PlayerData[playerid][pLoggedIn] = true;
-
-    // 1. Insert atau Update UCP Account ke MySQL
-    new queryUcp[320];
-    mysql_format(g_SQL, queryUcp, sizeof(queryUcp),
-        "INSERT INTO ucp_accounts (google_id, google_email, ucp_name) VALUES ('%e', '%e', '%e') ON DUPLICATE KEY UPDATE ucp_name = '%e';",
-        googleId, email, ucpName, ucpName
-    );
-    mysql_query(g_SQL, queryUcp);
-
-    // Ambil UCP ID yang baru dibuat
-    new ucpId = cache_insert_id();
-    if (ucpId == 0)
-    {
-        // Jika sudah ada sebelumnya, ambil id-nya
-        new fetchQuery[200];
-        mysql_format(g_SQL, fetchQuery, sizeof(fetchQuery), "SELECT id FROM ucp_accounts WHERE google_id = '%e' LIMIT 1;", googleId);
-        new Cache:result = mysql_query(g_SQL, fetchQuery);
-        if (cache_num_rows() > 0)
-        {
-            cache_get_value_name_int(0, "id", ucpId);
-        }
-        cache_delete(result);
-    }
-    PlayerData[playerid][pUcpId] = ucpId;
-
-    // 2. Insert Karakter Baru ke Tabel characters
-    new queryChar[500];
-    mysql_format(g_SQL, queryChar, sizeof(queryChar),
-        "INSERT INTO characters (ucp_id, character_name, birthplace, birthdate, gender, height, weight, money, skin, pos_x, pos_y, pos_z, pos_a) \
-         VALUES (%d, '%e', '%e', '%e', '%e', %d, %d, 500, %d, %.4f, %.4f, %.4f, %.4f);",
-        ucpId, characterName, birthplace, birthdate, gender, height, weight, PlayerData[playerid][pSkin],
-        DEFAULT_SPAWN_X, DEFAULT_SPAWN_Y, DEFAULT_SPAWN_Z, DEFAULT_SPAWN_A
-    );
-    mysql_query(g_SQL, queryChar);
-
-    // Set nama pemain di dalam server menjadi Nama Karakter IC baru
-    SetPlayerName(playerid, characterName);
-
-    // Berikan modal awal
-    ResetPlayerMoney(playerid);
-    GivePlayerMoney(playerid, 500);
-    SetPlayerSkin(playerid, PlayerData[playerid][pSkin]);
-
-    // Hancurkan WebView login
-    if (PlayerData[playerid][pHasCef])
-    {
-        CEF_DestroyBrowser(playerid, CEF_BROWSER_AUTH);
-        // Buat HUD Roleplay
-        CEF_CreateBrowser(playerid, CEF_BROWSER_HUD, "http://cef/roleplay/index.html", false, true, 0.0, 0.0);
-        CEF_EmitEvent(playerid, CEF_BROWSER_HUD, "updateStats", CEF_INT(500), CEF_FLOAT(100.0), CEF_FLOAT(0.0));
-    }
-
-    // Spawn ke titik awal Los Santos
-    SpawnPlayer(playerid);
-
-    new msg[144];
-    format(msg, sizeof(msg), "{33AA33}[REGISTER SUCCESS] Selamat datang di Vice Side, {FFFFFF}%s {33AA33}(Uang Awal: $500, Asal: %s)!", characterName, birthplace);
-    SendClientMessage(playerid, COLOR_GREEN, msg);
+    if (!PlayerData[playerid][pLoggedIn]) return 0;
     return 1;
 }
 
-// ========================================================================
-// 7. SPAWN HANDLER & ROLEPLAY COMMANDS
-// ========================================================================
+public OnPlayerRequestClass(playerid, classid)
+{
+    if (!PlayerData[playerid][pLoggedIn]) return 0;
+    return 1;
+}
+
 public OnPlayerSpawn(playerid)
 {
+    if (!PlayerData[playerid][pLoggedIn])
+    {
+        SetTimerEx("KickUnauthenticatedPlayer", 1200, false, "d", playerid);
+        return 1;
+    }
     SetPlayerInterior(playerid, PlayerData[playerid][pInterior]);
     SetPlayerVirtualWorld(playerid, PlayerData[playerid][pVirtualWorld]);
     SetPlayerPos(playerid, PlayerData[playerid][pPosX], PlayerData[playerid][pPosY], PlayerData[playerid][pPosZ]);
