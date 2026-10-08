@@ -10,6 +10,8 @@ const valid = {
   birthplace: 'Jakarta',
   birthdate: '1998-05-14',
   gender: 'Male',
+  height: 178,
+  weight: 74,
 };
 
 test('new characters start at Los Santos International Airport', () => {
@@ -23,13 +25,13 @@ test('new characters start at Los Santos International Airport', () => {
   });
 });
 
-test('accepts valid first-account registration and applies character defaults', () => {
+test('accepts valid first-account registration and preserves submitted profile measurements', () => {
   const result = validateRegistration(valid);
   assert.equal(result.ok, true);
   assert.equal(result.value.ucpName, 'Budi_Online');
   assert.equal(result.value.gender, 'Male');
-  assert.equal(result.value.height, 175);
-  assert.equal(result.value.weight, 70);
+  assert.equal(result.value.height, 178);
+  assert.equal(result.value.weight, 74);
 });
 
 test('accepts character-only registration for an existing UCP account', () => {

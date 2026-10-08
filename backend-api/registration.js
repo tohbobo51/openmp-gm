@@ -32,6 +32,8 @@ function validateRegistration(input, { requireUcpName = true } = {}) {
   const birthplace = text(input.birthplace);
   const birthdate = text(input.birthdate);
   const genderValue = text(input.gender).toLowerCase();
+  const height = Number(input.height);
+  const weight = Number(input.weight);
   const gender = genderValue === 'male' ? 'Male'
     : genderValue === 'female' ? 'Female' : '';
 
@@ -40,7 +42,9 @@ function validateRegistration(input, { requireUcpName = true } = {}) {
   }
   if (!CHARACTER_NAME_RE.test(characterName) || characterName.length > 23
       || !BIRTHPLACE_RE.test(birthplace) || birthplace.length > 63
-      || !validBirthdate(birthdate) || !gender) {
+      || !validBirthdate(birthdate) || !gender
+      || !Number.isInteger(height) || height < 80 || height > 250
+      || !Number.isInteger(weight) || weight < 20 || weight > 300) {
     return { ok: false, code: 'INVALID_REGISTRATION' };
   }
 
@@ -52,9 +56,8 @@ function validateRegistration(input, { requireUcpName = true } = {}) {
       birthplace,
       birthdate,
       gender,
-      // Match the existing character schema defaults until gameplay supports editing them.
-      height: 175,
-      weight: 70,
+      height,
+      weight,
     },
   };
 }
