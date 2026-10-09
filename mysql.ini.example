@@ -1,4 +1,4 @@
-; Salin file ini menjadi scriptfiles/mysql.ini di host open.mp.
+; Salin file ini menjadi mysql.ini di direktori root server Open.MP (mis. /home/container/mysql.ini).
 ; Isi host, user, dan password baru yang sudah dirotasi. Jangan commit mysql.ini.
 hostname = 127.0.0.1
 username = YOUR_DATABASE_USER

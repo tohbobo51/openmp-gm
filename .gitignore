@@ -22,4 +22,5 @@ Thumbs.db
 .env
 backend-api/.env
 backend-api/node_modules/
+mysql.ini
 scriptfiles/mysql.ini

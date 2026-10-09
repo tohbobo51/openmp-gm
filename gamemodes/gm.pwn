@@ -102,14 +102,12 @@ public OnGameModeInit()
     DisableInteriorEnterExits();
     UsePlayerPedAnims();
 
-    // Inisialisasi Database MySQL
-    new MySQLOpt:options = mysql_init_options();
-    mysql_set_option(options, AUTO_RECONNECT, true);
-
-    g_SQL = mysql_connect_file("scriptfiles/mysql.ini");
+    // R41-4 mysql_connect_file menerima nama file saja dan membacanya dari root server.
+    // Opsi seperti auto_reconnect dikonfigurasi di dalam file mysql.ini.
+    g_SQL = mysql_connect_file("mysql.ini");
     if (mysql_errno(g_SQL) != 0)
     {
-        printf("[MYSQL ERROR] mysql_connect_file(\"scriptfiles/mysql.ini\") failed. Error ID: %d", mysql_errno(g_SQL));
+        printf("[MYSQL ERROR] mysql_connect_file(\"mysql.ini\") failed. Error ID: %d", mysql_errno(g_SQL));
     }
     else
     {

@@ -45,7 +45,7 @@ OAuth Android client di Google Cloud juga harus cocok dengan package name dan SH
 ## Konfigurasi Open.MP dan database
 
 1. Rotasi password MySQL jika sebelumnya pernah tersimpan pada file contoh/config yang masuk Git.
-2. Di server, salin `scriptfiles/mysql.ini.example` menjadi `scriptfiles/mysql.ini`, lalu isi host, username, password baru, database, dan port. File `mysql.ini` aktif di-ignore oleh Git.
+2. Di panel file hosting, salin `mysql.ini.example` ke direktori root server (contoh: `/home/container/mysql.ini`), lalu isi host, username, password baru, database, dan port. R41-4 `mysql_connect_file` hanya menerima nama file dan mencari `mysql.ini` di root server; jangan taruh file ini di `scriptfiles/` dan jangan tambahkan path direktori pada pemanggilannya. Opsi koneksi seperti `auto_reconnect` dibaca dari dalam file INI. File aktif `mysql.ini` di-ignore oleh Git.
 3. Pastikan server Open.MP dan API dapat mengakses database yang sama; batasi akses database ke host yang diperlukan.
 4. Pastikan tabel `ucp_accounts` dan `characters` tersedia sesuai `database/schema.sql`. `ucp_name`, Google ID/email, dan nama karakter harus tersedia/tidak bentrok.
 5. Pemain baru dapat membuat akun dan karakter dari form launcher. Jika email sudah terikat ke Google identity lain, hubungi administrator; sistem tidak akan menghubungkan akun hanya berdasarkan email.
