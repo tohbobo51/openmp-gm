@@ -67,7 +67,8 @@ enum E_PLAYER_DATA
     pInterior,
     pVirtualWorld,
     bool:pLoggedIn,
-    bool:pHasCef
+    bool:pHasCef,
+    pAuthTimeoutTimer
 };
 
 new PlayerData[MAX_PLAYERS][E_PLAYER_DATA];
@@ -77,6 +78,7 @@ new MySQL:g_SQL;
 
 // Forward deklarasi query callback
 forward OnAccountCreated(playerid, ucpId);
+forward OnPlayerAuthTimeout(playerid);
 
 // ========================================================================
 // 3. MAIN & GAMEMODE INITIALIZATION
@@ -162,10 +164,20 @@ public OnCefInitialize(playerid, bool:success, E_CEF_INIT_REASON:reason, const m
 
 public OnPlayerConnect(playerid)
 {
+    if (PlayerData[playerid][pAuthTimeoutTimer] > 0)
+    {
+        KillTimer(PlayerData[playerid][pAuthTimeoutTimer]);
+    }
+    PlayerData[playerid][pAuthTimeoutTimer] = 0;
     PlayerData[playerid][pLoggedIn] = false;
     PlayerData[playerid][pHasCef] = false;
     PlayerData[playerid][pMoney] = 500;
     PlayerData[playerid][pSkin] = 299;
+
+    // Tahan class-selection sampai tiket dan data karakter berhasil diverifikasi.
+    TogglePlayerSpectating(playerid, true);
+    SendClientMessage(playerid, COLOR_LIGHTBLUE, "[LOGIN] Memverifikasi sesi Google, mohon tunggu...");
+    PlayerData[playerid][pAuthTimeoutTimer] = SetTimerEx("OnPlayerAuthTimeout", 30000, false, "d", playerid);
 
     SendClientMessage(playerid, COLOR_LIGHTBLUE, "==========================================================");
     SendClientMessage(playerid, COLOR_WHITE, "Selamat datang di {FF9900}" SERVER_NAME "{FFFFFF}!");
@@ -205,11 +217,17 @@ public OnPlayerConnect(playerid)
 
 public OnPlayerDisconnect(playerid, reason)
 {
+    if (PlayerData[playerid][pAuthTimeoutTimer] > 0)
+    {
+        KillTimer(PlayerData[playerid][pAuthTimeoutTimer]);
+        PlayerData[playerid][pAuthTimeoutTimer] = 0;
+    }
     if (PlayerData[playerid][pHasCef])
     {
         CEF_DestroyBrowser(playerid, CEF_BROWSER_HUD);
     }
     PlayerData[playerid][pLoggedIn] = false;
+    PlayerData[playerid][pHasCef] = false;
     return 1;
 }
 
@@ -220,8 +238,10 @@ forward OnAccountCheckLogin(playerid, const loginTicket[]);
 public OnAuthTicketClaimed(playerid, const loginTicket[])
 {
     if (!IsPlayerConnected(playerid)) return 1;
-    if (cache_affected_rows() != 1)
+    new affectedRows = cache_affected_rows();
+    if (affectedRows != 1)
     {
+        printf("[LOGIN ERROR] Ticket claim rejected for playerid %d (affected rows: %d, MySQL errno: %d).", playerid, affectedRows, mysql_errno(g_SQL));
         SendClientMessage(playerid, COLOR_RED, "[LOGIN] Tiket tidak valid, sudah dipakai, atau kedaluwarsa.");
         SetTimerEx("KickUnauthenticatedPlayer", 1200, false, "d", playerid);
         return 1;
@@ -245,6 +265,17 @@ public OnAuthTicketClaimed(playerid, const loginTicket[])
 public KickUnauthenticatedPlayer(playerid)
 {
     if (IsPlayerConnected(playerid)) Kick(playerid);
+    return 1;
+}
+
+public OnPlayerAuthTimeout(playerid)
+{
+    if (!IsPlayerConnected(playerid) || PlayerData[playerid][pLoggedIn]) return 1;
+
+    PlayerData[playerid][pAuthTimeoutTimer] = 0;
+    SendClientMessage(playerid, COLOR_RED, "[LOGIN] Verifikasi belum selesai. Coba masuk lagi; jika berulang, administrator perlu memeriksa koneksi database server.");
+    printf("[LOGIN ERROR] Authentication timeout for playerid %d; check the API/server database connection and ticket-table permissions.", playerid);
+    Kick(playerid);
     return 1;
 }
 
@@ -280,6 +311,11 @@ public OnAccountCheckLogin(playerid, const loginTicket[])
         cache_get_value_name_int(0, "interior", PlayerData[playerid][pInterior]);
         cache_get_value_name_int(0, "virtual_world", PlayerData[playerid][pVirtualWorld]);
 
+        if (PlayerData[playerid][pAuthTimeoutTimer] > 0)
+        {
+            KillTimer(PlayerData[playerid][pAuthTimeoutTimer]);
+            PlayerData[playerid][pAuthTimeoutTimer] = 0;
+        }
         PlayerData[playerid][pLoggedIn] = true;
 
         // Ubah nama pemain di dalam server menjadi Nama IC
@@ -289,6 +325,11 @@ public OnAccountCheckLogin(playerid, const loginTicket[])
         ResetPlayerMoney(playerid);
         GivePlayerMoney(playerid, PlayerData[playerid][pMoney]);
         SetPlayerSkin(playerid, PlayerData[playerid][pSkin]);
+        SetSpawnInfo(playerid, 0, PlayerData[playerid][pSkin],
+            PlayerData[playerid][pPosX], PlayerData[playerid][pPosY], PlayerData[playerid][pPosZ], PlayerData[playerid][pPosA],
+            WEAPON_FIST, 0, WEAPON_FIST, 0, WEAPON_FIST, 0);
+        SetPlayerInterior(playerid, PlayerData[playerid][pInterior]);
+        SetPlayerVirtualWorld(playerid, PlayerData[playerid][pVirtualWorld]);
 
         // Hancurkan WebView login
         if (PlayerData[playerid][pHasCef])
@@ -298,8 +339,10 @@ public OnAccountCheckLogin(playerid, const loginTicket[])
             CEF_EmitEvent(playerid, CEF_BROWSER_HUD, "updateStats", CEF_INT(PlayerData[playerid][pMoney]), CEF_FLOAT(100.0), CEF_FLOAT(0.0));
         }
 
-        // Spawn pemain ke posisi tersimpan
+        // Lepas spectate hanya setelah data karakter lengkap, lalu paksa spawn otomatis.
+        TogglePlayerSpectating(playerid, false);
         SpawnPlayer(playerid);
+        printf("[LOGIN SUCCESS] Player %d authenticated; spawning at %.2f, %.2f, %.2f.", playerid, PlayerData[playerid][pPosX], PlayerData[playerid][pPosY], PlayerData[playerid][pPosZ]);
 
         new welcomeMsg[128];
         format(welcomeMsg, sizeof(welcomeMsg), "{33CCFF}[LOGIN SUCCESS] Selamat datang kembali, {FFFFFF}%s {33CCFF}(UCP: %s)!", PlayerData[playerid][pCharacterName], PlayerData[playerid][pUcpName]);
@@ -307,6 +350,7 @@ public OnAccountCheckLogin(playerid, const loginTicket[])
     }
     else
     {
+        printf("[LOGIN ERROR] No character row found for playerid %d after a valid ticket claim.", playerid);
         SendClientMessage(playerid, COLOR_RED, "[LOGIN] Karakter tidak ditemukan. Hubungi administrator server.");
         SetTimerEx("KickUnauthenticatedPlayer", 1500, false, "d", playerid);
     }
