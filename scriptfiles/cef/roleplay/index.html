@@ -2,217 +2,406 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vice Side Roleplay - CEF HUD</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#080b14">
+    <title>Vice Side Roleplay - HUD</title>
     <style>
-        * {
-            box-sizing: border-box;
-            user-select: none;
-            margin: 0;
-            padding: 0;
+        :root {
+            color-scheme: dark;
+            --glass: rgba(12, 16, 27, .82);
+            --glass-strong: rgba(10, 13, 23, .96);
+            --line: rgba(255, 255, 255, .12);
+            --muted: #a1a9bb;
+            --gold: #f3bc57;
+            --cyan: #72d9ee;
+            --ease: cubic-bezier(.2, .8, .2, 1);
         }
-        body, html {
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background: transparent;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            color: #ffffff;
-        }
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+        html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #fff; }
+        body { pointer-events: none; }
+        button { color: inherit; font: inherit; border: 0; cursor: pointer; }
+        svg { display: block; }
 
-        /* Top-Right Player Stats & Server Banner */
+        /* Existing roleplay HUD */
         .hud-top-right {
-            position: absolute;
-            top: 24px;
-            right: 28px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            align-items: flex-end;
+            position: absolute; top: clamp(12px, 2.2vh, 26px); right: clamp(14px, 2.4vw, 32px);
+            display: flex; flex-direction: column; align-items: flex-end; gap: 9px; pointer-events: none;
         }
-
-        .server-badge {
-            background: rgba(15, 15, 20, 0.75);
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(255, 187, 0, 0.3);
-            border-radius: 8px;
-            padding: 8px 14px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+        .server-badge, .stats-panel, .speedometer {
+            background: rgba(13, 16, 25, .82); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, .11); box-shadow: 0 12px 32px rgba(0, 0, 0, .26);
         }
-
-        .server-title {
-            font-size: 13px;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-            color: #ffbb00;
-            text-transform: uppercase;
-        }
-
-        .server-ip {
-            font-size: 11px;
-            color: #8e8e93;
-            font-family: monospace;
-        }
-
-        .stats-panel {
-            background: rgba(15, 15, 20, 0.85);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-            padding: 12px 16px;
-            width: 220px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .money-counter {
-            font-size: 18px;
-            font-weight: 800;
-            color: #34c759;
-            font-family: monospace;
-            text-align: right;
-            text-shadow: 0 0 10px rgba(52, 199, 89, 0.4);
-        }
-
-        .bar-container {
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
-        }
-
-        .bar-label {
-            display: flex;
-            justify-content: space-between;
-            font-size: 10px;
-            color: #8e8e93;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-
-        .progress-bar {
-            width: 100%;
-            height: 6px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 3px;
-            overflow: hidden;
-        }
-
-        .health-fill {
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, #ff3b30, #ff453a);
-            border-radius: 3px;
-            transition: width 0.3s ease;
-        }
-
-        .armour-fill {
-            width: 0%;
-            height: 100%;
-            background: linear-gradient(90deg, #0a84ff, #5ac8fa);
-            border-radius: 3px;
-            transition: width 0.3s ease;
-        }
-
-        /* Bottom-Right Speedometer (Hidden by default, shown when inside vehicle) */
+        .server-badge { display: flex; align-items: center; gap: 10px; padding: 8px 13px; border-radius: 12px; border-color: rgba(243, 188, 87, .28); }
+        .server-mark { width: 8px; height: 8px; border-radius: 50%; background: #63db91; box-shadow: 0 0 12px rgba(99, 219, 145, .65); }
+        .server-title { color: var(--gold); font-size: clamp(10px, 1.2vw, 13px); font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+        .server-ip { margin-top: 2px; color: #9da5b7; font-size: clamp(9px, 1vw, 11px); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+        .stats-panel { width: clamp(174px, 20vw, 220px); display: flex; flex-direction: column; gap: 9px; padding: 11px 13px; border-radius: 13px; }
+        .money-counter { color: #7ee6a0; font: 800 clamp(15px, 1.8vw, 19px)/1.1 ui-monospace, SFMono-Regular, Menlo, monospace; text-align: right; text-shadow: 0 0 12px rgba(67, 218, 126, .25); }
+        .bar-container { display: flex; flex-direction: column; gap: 4px; }
+        .bar-label { display: flex; justify-content: space-between; color: #a2aabd; font-size: 9px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+        .progress-bar { width: 100%; height: 5px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.12); }
+        .health-fill, .armour-fill { width: 100%; height: 100%; border-radius: inherit; transition: width .3s ease; }
+        .health-fill { background: linear-gradient(90deg, #f15b65, #ff8c72); }
+        .armour-fill { width: 0%; background: linear-gradient(90deg, #48b6ff, #8ce9ff); }
         .speedometer {
-            position: absolute;
-            bottom: 30px;
-            right: 30px;
-            background: rgba(15, 15, 20, 0.85);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 187, 0, 0.3);
-            border-radius: 14px;
-            padding: 16px 20px;
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            gap: 6px;
-            width: 160px;
+            position: absolute; right: clamp(16px, 2.4vw, 32px); bottom: clamp(16px, 3vh, 32px);
+            display: none; flex-direction: column; align-items: center; gap: 4px; width: 132px; padding: 14px 18px;
+            border-color: rgba(243, 188, 87, .26); border-radius: 16px; pointer-events: none;
         }
+        .speed-value { color: var(--gold); font: 900 32px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+        .speed-unit { color: #a2aabd; font-size: 10px; font-weight: 800; letter-spacing: .12em; }
 
-        .speed-value {
-            font-size: 36px;
-            font-weight: 900;
-            font-family: monospace;
-            color: #ffbb00;
-            line-height: 1;
+        /* Two always-ready action buttons on the right side. */
+        .quick-actions {
+            position: absolute; z-index: 10; right: clamp(14px, 2.4vw, 32px); top: 50%; transform: translateY(-50%);
+            display: flex; flex-direction: column; gap: 10px; pointer-events: none;
         }
+        .quick-button {
+            width: clamp(58px, 8.2vh, 76px); min-height: clamp(58px, 8.2vh, 76px); padding: 8px 5px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+            border: 1px solid rgba(255,255,255,.18); border-radius: 21px;
+            background: linear-gradient(150deg, rgba(28, 35, 52, .92), rgba(11, 14, 25, .94));
+            box-shadow: 0 9px 24px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.09);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            transition: transform .18s var(--ease), border-color .18s ease, box-shadow .18s ease;
+            pointer-events: auto; touch-action: manipulation;
+        }
+        .quick-button:active { transform: scale(.92); }
+        .quick-button:hover, .quick-button:focus-visible { border-color: rgba(114,217,238,.65); box-shadow: 0 0 0 3px rgba(114,217,238,.12), 0 10px 26px rgba(0,0,0,.35); outline: none; }
+        .quick-button .quick-icon { width: 25px; height: 25px; color: #fff; }
+        .quick-button .quick-label { color: #e9edf6; font-size: 9px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+        #panel-trigger .quick-icon { color: var(--gold); }
+        #phone-trigger .quick-icon { color: var(--cyan); }
 
-        .speed-unit {
-            font-size: 11px;
-            font-weight: 700;
-            color: #8e8e93;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+        /* Radial panel */
+        .modal-layer {
+            position: fixed; z-index: 30; inset: 0; display: none; align-items: center; justify-content: center;
+            padding: 18px; background: rgba(5, 7, 13, .48); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+            pointer-events: auto; touch-action: manipulation;
         }
+        .modal-layer.is-open { display: flex; animation: veil-in .18s ease-out both; }
+        @keyframes veil-in { from { opacity: 0; } to { opacity: 1; } }
+        .wheel {
+            position: relative; width: min(76vmin, 500px); height: min(76vmin, 500px); min-width: 300px; min-height: 300px;
+            border: 1px solid rgba(255,255,255,.14); border-radius: 50%;
+            background: radial-gradient(circle at 50% 45%, rgba(28,37,56,.96), rgba(11,15,25,.97) 65%);
+            box-shadow: 0 25px 90px rgba(0,0,0,.48), inset 0 0 45px rgba(111,183,226,.06);
+            animation: wheel-in .28s var(--ease) both; touch-action: manipulation;
+        }
+        @keyframes wheel-in { from { opacity: 0; transform: scale(.88); } to { opacity: 1; transform: scale(1); } }
+        .wheel::before, .wheel::after { content: ""; position: absolute; inset: 12%; border: 1px solid rgba(255,255,255,.07); border-radius: 50%; pointer-events: none; }
+        .wheel::after { inset: 26%; border-color: rgba(243,188,87,.12); }
+        .wheel-center {
+            position: absolute; left: 50%; top: 50%; z-index: 2; width: 34%; aspect-ratio: 1;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+            padding: 10px; transform: translate(-50%,-50%); border: 1px solid rgba(243,188,87,.28); border-radius: 50%;
+            background: radial-gradient(circle, rgba(37,43,57,.98), rgba(12,15,24,.98)); box-shadow: 0 0 34px rgba(243,188,87,.1);
+            text-align: center;
+        }
+        .wheel-kicker { color: var(--gold); font-size: clamp(8px, 1.1vw, 10px); font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }
+        .wheel-selection { max-width: 95%; color: #fff; font-size: clamp(11px, 1.8vw, 16px); font-weight: 800; line-height: 1.15; }
+        .wheel-hint { color: #9da5b5; font-size: clamp(8px, 1.1vw, 10px); }
+        .wheel-item {
+            position: absolute; z-index: 3; left: 50%; top: 50%; width: clamp(82px, 19vmin, 104px); min-height: clamp(82px, 19vmin, 104px);
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+            border: 1px solid rgba(255,255,255,.15); border-radius: 28px;
+            background: linear-gradient(145deg, rgba(38,47,65,.97), rgba(15,20,32,.98));
+            box-shadow: 0 12px 26px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.08);
+            transform: translate(-50%,-50%);
+            transition: transform .18s var(--ease), border-color .18s ease, background .18s ease, box-shadow .18s ease;
+            pointer-events: auto; touch-action: manipulation;
+        }
+        .wheel-item:active { transform: translate(-50%,-50%) scale(.93); }
+        .wheel-item:hover, .wheel-item.is-selected { border-color: rgba(243,188,87,.75); background: linear-gradient(145deg, rgba(76,57,32,.98), rgba(23,23,29,.98)); box-shadow: 0 0 0 3px rgba(243,188,87,.1), 0 12px 28px rgba(0,0,0,.38); }
+        .wheel-item svg { width: 29px; height: 29px; color: var(--gold); }
+        .wheel-item span { color: #f4f5f8; font-size: clamp(9px, 1.3vw, 11px); font-weight: 800; letter-spacing: .03em; }
+        .wheel-item small { color: #a1a9bb; font-size: 8px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+        .wheel-item[data-item="inventory"] { left: 50%; top: 14%; }
+        .wheel-item[data-item="property"] { left: 86%; top: 50%; }
+        .wheel-item[data-item="animation"] { left: 50%; top: 86%; }
+        .wheel-item[data-item="vehicle"] { left: 14%; top: 50%; }
+        .wheel-close {
+            position: absolute; z-index: 4; top: 5%; right: 13%; width: 38px; height: 38px; display: grid; place-items: center;
+            border: 1px solid rgba(255,255,255,.16); border-radius: 50%; background: rgba(17,21,32,.95); color: #d9deea;
+            pointer-events: auto;
+        }
+        .wheel-close svg { width: 17px; height: 17px; }
+        .wheel-close:active { transform: scale(.9); }
+
+        /* iPhone-inspired phone shell */
+        .phone-layer { z-index: 40; background: rgba(4,6,12,.62); }
+        .phone-device {
+            position: relative; width: min(calc(82vh * .52), 280px, 76vw); height: min(82vh, 560px); min-height: 280px; aspect-ratio: .52;
+            overflow: hidden; border: 3px solid #aeb6c4; border-radius: clamp(34px, 7vmin, 48px);
+            background: #10121a; box-shadow: 0 30px 100px rgba(0,0,0,.65), inset 0 0 0 2px rgba(255,255,255,.1);
+            animation: phone-in .3s var(--ease) both; pointer-events: auto; touch-action: none;
+        }
+        @keyframes phone-in { from { opacity: 0; transform: translateY(26px) scale(.94); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        .phone-wallpaper {
+            position: absolute; inset: 0; overflow: hidden;
+            background: radial-gradient(ellipse at 18% 18%, rgba(105,204,231,.94), transparent 42%),
+                        radial-gradient(ellipse at 90% 35%, rgba(150,109,221,.95), transparent 42%),
+                        radial-gradient(ellipse at 45% 90%, rgba(238,165,94,.92), transparent 48%),
+                        linear-gradient(150deg,#172445,#31254f 52%,#102c3d);
+        }
+        .phone-wallpaper::before, .phone-wallpaper::after { content: ""; position: absolute; width: 125%; height: 47%; left: -12%; top: 42%; border-radius: 50%; border: 1px solid rgba(255,255,255,.17); transform: rotate(-25deg); box-shadow: 0 -18px 55px rgba(174,207,255,.1); }
+        .phone-wallpaper::after { top: 51%; left: -8%; transform: rotate(17deg); border-color: rgba(255,255,255,.12); }
+        .phone-status { position: absolute; top: 19px; left: 25px; right: 25px; z-index: 4; display: flex; justify-content: space-between; align-items: center; color: white; font-size: 11px; font-weight: 800; text-shadow: 0 1px 6px rgba(0,0,0,.35); }
+        .phone-status-icons { display: flex; gap: 5px; align-items: center; }
+        .phone-status-icons svg { width: 13px; height: 13px; }
+        .dynamic-island { position: absolute; z-index: 5; top: 12px; left: 50%; width: 82px; height: 22px; transform: translateX(-50%); border-radius: 99px; background: #030407; box-shadow: 0 1px 2px rgba(255,255,255,.1); }
+        .phone-close { position: absolute; z-index: 6; top: 52px; right: 16px; width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.25); border-radius: 50%; background: rgba(10,12,20,.32); pointer-events: auto; }
+        .phone-close svg { width: 15px; height: 15px; }
+        .lock-screen { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; padding: 76px 22px 28px; text-align: center; transition: transform .32s var(--ease), opacity .25s ease; }
+        .lock-screen.is-unlocking { transform: translateY(-110%); opacity: 0; }
+        .lock-date { color: rgba(255,255,255,.86); font-size: 13px; font-weight: 600; text-shadow: 0 2px 10px rgba(0,0,0,.28); }
+        .lock-time { margin-top: 3px; color: white; font-size: clamp(54px, 12vmin, 76px); font-weight: 250; letter-spacing: -.07em; line-height: 1; text-shadow: 0 3px 18px rgba(0,0,0,.28); }
+        .lock-notice { margin-top: 32px; padding: 12px 14px; border: 1px solid rgba(255,255,255,.19); border-radius: 17px; background: rgba(15,19,31,.2); backdrop-filter: blur(14px); color: white; font-size: 12px; line-height: 1.35; text-align: left; }
+        .lock-notice strong { display: block; margin-bottom: 3px; font-size: 11px; }
+        .lock-spacer { flex: 1; }
+        .swipe-area { width: 100%; min-height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 10px; padding-bottom: 16px; touch-action: none; }
+        .swipe-handle { width: 46px; height: 46px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.35); border-radius: 50%; background: rgba(255,255,255,.15); box-shadow: 0 6px 22px rgba(0,0,0,.16); transition: transform .12s ease; }
+        .swipe-handle svg { width: 21px; height: 21px; }
+        .swipe-text { color: rgba(255,255,255,.88); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; text-shadow: 0 2px 7px rgba(0,0,0,.35); }
+        .home-screen { position: absolute; z-index: 1; inset: 0; display: flex; flex-direction: column; padding: 74px 20px 27px; opacity: 0; transform: scale(1.035); transition: opacity .3s ease .12s, transform .3s var(--ease) .12s; pointer-events: none; }
+        .home-screen.is-visible { z-index: 3; opacity: 1; transform: scale(1); pointer-events: auto; }
+        .home-greeting { margin-bottom: 8px; color: rgba(255,255,255,.78); font-size: 11px; font-weight: 700; }
+        .home-title { margin-bottom: 20px; color: #fff; font-size: 23px; font-weight: 850; letter-spacing: -.03em; }
+        .app-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px 7px; }
+        .phone-app { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 0; background: transparent; pointer-events: auto; touch-action: manipulation; }
+        .app-icon { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.28); border-radius: 15px; background: linear-gradient(145deg,rgba(255,255,255,.31),rgba(255,255,255,.08)); box-shadow: 0 8px 18px rgba(0,0,0,.2); }
+        .app-icon svg { width: 23px; height: 23px; }
+        .phone-app span:last-child { color: #fff; font-size: 9px; font-weight: 700; text-shadow: 0 1px 6px rgba(0,0,0,.4); }
+        .phone-dock { display: flex; justify-content: space-around; gap: 8px; margin-top: auto; padding: 9px 8px; border: 1px solid rgba(255,255,255,.19); border-radius: 22px; background: rgba(245,247,255,.18); backdrop-filter: blur(18px); }
+        .phone-dock .app-icon { width: 42px; height: 42px; border-radius: 14px; }
+        .home-indicator { position: absolute; z-index: 6; left: 50%; bottom: 8px; width: 83px; height: 4px; transform: translateX(-50%); border-radius: 10px; background: rgba(255,255,255,.88); pointer-events: auto; }
+        .phone-toast { position: absolute; z-index: 8; left: 50%; bottom: 42px; max-width: 85%; padding: 9px 13px; transform: translate(-50%,12px); border: 1px solid rgba(255,255,255,.18); border-radius: 99px; background: rgba(11,14,24,.86); color: white; font-size: 10px; font-weight: 700; opacity: 0; transition: opacity .18s ease, transform .18s ease; pointer-events: none; white-space: nowrap; }
+        .phone-toast.is-visible { opacity: 1; transform: translate(-50%,0); }
+
+        @media (max-width: 600px) {
+            .hud-top-right { top: 10px; right: 10px; gap: 6px; }
+            .stats-panel { width: 164px; padding: 9px 10px; gap: 7px; }
+            .server-badge { padding: 6px 9px; }
+            .quick-actions { right: 10px; gap: 7px; }
+            .quick-button { width: 54px; min-height: 54px; border-radius: 17px; }
+            .quick-button .quick-icon { width: 21px; height: 21px; }
+            .wheel { width: min(88vmin, 440px); height: min(88vmin, 440px); min-width: 280px; min-height: 280px; }
+            .wheel-item { width: clamp(74px, 18vmin, 92px); min-height: clamp(74px, 18vmin, 92px); border-radius: 23px; }
+            .phone-device { width: min(calc(86vh * .52), 260px, 76vw); height: min(86vh, 520px); }
+        }
+        @media (max-height: 420px) {
+            .quick-actions { top: 52%; }
+            .quick-button { width: 50px; min-height: 50px; }
+            .phone-device { width: min(calc(92vh * .52), 78vw); height: 92vh; min-height: 260px; }
+            .app-grid { gap: 10px 4px; }
+            .app-icon { width: 36px; height: 36px; border-radius: 12px; }
+            .lock-screen { padding-top: 58px; }
+            .lock-notice { margin-top: 18px; }
+            .home-screen { padding-top: 58px; }
+        }
+        @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
     </style>
 </head>
 <body>
-    <!-- Top-right HUD -->
-    <div class="hud-top-right">
+    <!-- Existing HUD -->
+    <div class="hud-top-right" aria-label="Status server">
         <div class="server-badge">
-            <div>
-                <div class="server-title">Vice Side Roleplay</div>
-                <div class="server-ip">142.132.203.47:10125</div>
-            </div>
+            <span class="server-mark"></span>
+            <div><div class="server-title">Vice Side Roleplay</div><div class="server-ip">142.132.203.47:10125</div></div>
         </div>
-
         <div class="stats-panel">
             <div class="money-counter" id="hud-money">$500</div>
-            
-            <div class="bar-container">
-                <div class="bar-label">
-                    <span>Health</span>
-                    <span id="health-val">100%</span>
-                </div>
-                <div class="progress-bar">
-                    <div class="health-fill" id="hud-health"></div>
-                </div>
-            </div>
-
-            <div class="bar-container">
-                <div class="bar-label">
-                    <span>Armour</span>
-                    <span id="armour-val">0%</span>
-                </div>
-                <div class="progress-bar">
-                    <div class="armour-fill" id="hud-armour"></div>
-                </div>
-            </div>
+            <div class="bar-container"><div class="bar-label"><span>Health</span><span id="health-val">100%</span></div><div class="progress-bar"><div class="health-fill" id="hud-health"></div></div></div>
+            <div class="bar-container"><div class="bar-label"><span>Armour</span><span id="armour-val">0%</span></div><div class="progress-bar"><div class="armour-fill" id="hud-armour"></div></div></div>
         </div>
     </div>
+    <div class="speedometer" id="speedo-box"><div class="speed-value" id="speed-val">0</div><div class="speed-unit">KM / H</div></div>
 
-    <!-- Bottom-right Speedometer -->
-    <div class="speedometer" id="speedo-box">
-        <div class="speed-value" id="speed-val">0</div>
-        <div class="speed-unit">KM / H</div>
+    <!-- Right-side quick actions -->
+    <nav class="quick-actions" aria-label="Menu cepat">
+        <button class="quick-button" id="panel-trigger" type="button" aria-label="Buka panel radial" title="Panel">
+            <svg class="quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.8"/><path d="M12 3.2v3M20.8 12h-3M12 20.8v-3M3.2 12h3"/><circle cx="12" cy="12" r="2.3"/><path d="m12 9.7 3.3-3.3M14.3 12l3.4 3.4"/></svg>
+            <span class="quick-label">Panel</span>
+        </button>
+        <button class="quick-button" id="phone-trigger" type="button" aria-label="Buka handphone" title="Handphone">
+            <svg class="quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.2" y="2.2" width="13.6" height="19.6" rx="3.2"/><path d="M9 5h6M10.3 18.5h3.4"/><circle cx="12" cy="14.3" r="1.7"/></svg>
+            <span class="quick-label">HP</span>
+        </button>
+    </nav>
+
+    <!-- Radial menu: features are deliberately placeholders until gameplay systems are built. -->
+    <div class="modal-layer" id="wheel-layer" aria-hidden="true">
+        <section class="wheel" id="wheel" role="dialog" aria-modal="true" aria-label="Panel utama">
+            <button class="wheel-close" id="wheel-close" type="button" aria-label="Tutup panel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            <div class="wheel-center"><span class="wheel-kicker">VICE SIDE</span><strong class="wheel-selection" id="wheel-selection">Pilih menu</strong><span class="wheel-hint" id="wheel-hint">Ketuk salah satu ikon</span></div>
+            <button class="wheel-item" data-item="inventory" type="button" aria-label="Inventory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l1.2 12H3.8L5 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2M9 12v.2M15 12v.2"/><path d="M7.5 8 8.2 5.5M16.5 8l-.7-2.5"/></svg><span>Inventory</span><small>Segera</small></button>
+            <button class="wheel-item" data-item="property" type="button" aria-label="Property"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9M9 20v-7h6v7"/><path d="M17 5.9V4h2v3.5"/></svg><span>Property</span><small>Segera</small></button>
+            <button class="wheel-item" data-item="animation" type="button" aria-label="Animasi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.5" r="2"/><path d="m10.7 8 3.6 2 3.2-.3M11 8l-2 5 3.2 2.3-1.7 5M12.2 15.3l4.8 4.3M8.8 13 5 16"/><path d="m18.8 4 .5 1.2 1.2.5-1.2.5-.5 1.2-.5-1.2-1.2-.5 1.2-.5.5-1.2Z"/></svg><span>Animasi</span><small>Segera</small></button>
+            <button class="wheel-item" data-item="vehicle" type="button" aria-label="Kendaraan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m5 11 1.5-4.3A2.5 2.5 0 0 1 8.9 5h6.2a2.5 2.5 0 0 1 2.4 1.7L19 11"/><path d="M3.5 11h17v7h-17zM6 18v1.5M18 18v1.5M6 14h.1M18 14h.1M3.5 14H2M22 14h-1.5"/><path d="M7 11h10"/></svg><span>Kendaraan</span><small>Segera</small></button>
+        </section>
+    </div>
+
+    <!-- iPhone-inspired phone with a real swipe-up-to-unlock gesture. -->
+    <div class="modal-layer phone-layer" id="phone-layer" aria-hidden="true">
+        <section class="phone-device" role="dialog" aria-modal="true" aria-label="Handphone karakter">
+            <div class="phone-wallpaper"></div>
+            <div class="dynamic-island"></div>
+            <div class="phone-status"><span id="phone-status-time">9:41</span><span class="phone-status-icons"><svg viewBox="0 0 20 16" fill="currentColor"><path d="M1 5.2C5.8 1.2 14.2 1.2 19 5.2L10 15.2 1 5.2Z"/></svg><svg viewBox="0 0 20 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12V9M6 12V6M10 12V3M14 12V1"/></svg><svg viewBox="0 0 24 14" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1" y="2" width="19" height="10" rx="2"/><path d="M22 5v4M4 5h12v4H4z" fill="currentColor"/></svg></span></div>
+            <button class="phone-close" id="phone-close" type="button" aria-label="Tutup handphone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            <div class="lock-screen" id="lock-screen">
+                <div class="lock-date" id="lock-date">Friday, October 9</div>
+                <div class="lock-time" id="lock-time">9:41</div>
+                <div class="lock-notice"><strong>Vice Side Roleplay</strong>Handphone karakter siap digunakan.</div>
+                <div class="lock-spacer"></div>
+                <div class="swipe-area" id="swipe-area" aria-label="Geser ke atas untuk membuka">
+                    <div class="swipe-handle" id="swipe-handle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 14 5-5 5 5"/></svg></div>
+                    <span class="swipe-text">Geser ke atas untuk membuka</span>
+                </div>
+            </div>
+            <div class="home-screen" id="home-screen" aria-hidden="true">
+                <div class="home-greeting">VICE SIDE ROLEPLAY</div>
+                <div class="home-title">Aplikasi</div>
+                <div class="app-grid">
+                    <button class="phone-app" data-app="Inventory" type="button"><span class="app-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l1 12H4L5 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg></span><span>Inventory</span></button>
+                    <button class="phone-app" data-app="Property" type="button"><span class="app-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7M5 9v11h14V9M9 20v-7h6v7"/></svg></span><span>Property</span></button>
+                    <button class="phone-app" data-app="Animasi" type="button"><span class="app-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.5" r="2"/><path d="m10.7 8 3.6 2 3.2-.3M11 8l-2 5 3.2 2.3-1.7 5M12.2 15.3l4.8 4.3M8.8 13 5 16"/></svg></span><span>Animasi</span></button>
+                    <button class="phone-app" data-app="Kontak" type="button"><span class="app-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20a7 7 0 0 1 14 0M3 5v14M21 5v14"/></svg></span><span>Kontak</span></button>
+                    <button class="phone-app" data-app="Pesan" type="button"><span class="app-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l-2 2v-9.5A7.5 7.5 0 0 1 10.5 4H12a8 8 0 0 1 8 7.5Z"/><path d="M7 11h.1M11 11h.1M15 11h.1"/></svg></span><span>Pesan</span></button>
+                    <button class="phone-app" data-app="Pengaturan" type="button"><span class="app-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.2 1-1.4 2.4-1.5-.5a7.8 7.8 0 0 1-1.5.9l-.3 1.6h-2.8l-.3-1.6a7.8 7.8 0 0 1-1.5-.9l-1.5.5-1.4-2.4 1.2-1a7 7 0 0 1 0-1.8l-1.2-1 1.4-2.4 1.5.5a7.8 7.8 0 0 1 1.5-.9l.3-1.6h2.8l.3 1.6a7.8 7.8 0 0 1 1.5.9l1.5-.5 1.4 2.4-1.2 1a7 7 0 0 1 0 1.7Z"/></svg></span><span>Pengaturan</span></button>
+                </div>
+                <div class="phone-dock">
+                    <button class="phone-app" data-app="Telepon" type="button" aria-label="Telepon"><span class="app-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M7 3 4 5c-.8.6-.5 3 1.2 6.1a19 19 0 0 0 7.7 7.7C16 20.5 18.4 20.8 19 20l2-3-5-3-2 2c-1.5-.6-4.4-3.5-5-5l2-2-4-6Z"/></svg></span></button>
+                    <button class="phone-app" data-app="Kamera" type="button" aria-label="Kamera"><span class="app-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h4l1.5-2h5L16 7h4v12H4z"/><circle cx="12" cy="13" r="4"/></svg></span></button>
+                    <button class="phone-app" data-app="Peta" type="button" aria-label="Peta"><span class="app-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15M15 6v15"/><path d="M12 8a2 2 0 1 0 0 4c1.5 0 2-2 0-4Z"/></svg></span></button>
+                    <button class="phone-app" data-app="Musik" type="button" aria-label="Musik"><span class="app-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></span></button>
+                </div>
+            </div>
+            <div class="phone-toast" id="phone-toast" role="status">Fitur akan tersedia di update berikutnya</div>
+            <div class="home-indicator" id="home-indicator" aria-label="Kembali ke layar kunci"></div>
+        </section>
     </div>
 
     <script>
-        // Listen for CEF events emitted from Pawn
-        if (window.cef) {
-            cef.on("updateStats", function(money, health, armour) {
-                document.getElementById("hud-money").innerText = "$" + Number(money).toLocaleString();
-                document.getElementById("hud-health").style.width = health + "%";
-                document.getElementById("health-val").innerText = Math.round(health) + "%";
-                document.getElementById("hud-armour").style.width = armour + "%";
-                document.getElementById("armour-val").innerText = Math.round(armour) + "%";
-            });
+        (() => {
+            const $ = (selector, root = document) => root.querySelector(selector);
+            const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+            const wheelLayer = $('#wheel-layer');
+            const phoneLayer = $('#phone-layer');
+            const lockScreen = $('#lock-screen');
+            const homeScreen = $('#home-screen');
+            const swipeArea = $('#swipe-area');
+            const swipeHandle = $('#swipe-handle');
+            let swipeStart = null;
+            let toastTimer = null;
 
-            cef.on("updateSpeed", function(speed, inVehicle) {
-                const box = document.getElementById("speedo-box");
-                if (inVehicle) {
-                    box.style.display = "flex";
-                    document.getElementById("speed-val").innerText = Math.round(speed);
+            function showLayer(layer) {
+                layer.classList.add('is-open');
+                layer.setAttribute('aria-hidden', 'false');
+            }
+            function hideLayer(layer) {
+                layer.classList.remove('is-open');
+                layer.setAttribute('aria-hidden', 'true');
+            }
+            function openWheel() {
+                hideLayer(phoneLayer);
+                $$('.wheel-item').forEach(item => item.classList.remove('is-selected'));
+                $('#wheel-selection').textContent = 'Pilih menu';
+                $('#wheel-hint').textContent = 'Ketuk salah satu ikon';
+                showLayer(wheelLayer);
+            }
+            function openPhone() {
+                hideLayer(wheelLayer);
+                lockScreen.classList.remove('is-unlocking');
+                homeScreen.classList.remove('is-visible');
+                homeScreen.setAttribute('aria-hidden', 'true');
+                showLayer(phoneLayer);
+                updatePhoneClock();
+            }
+            function unlockPhone() {
+                lockScreen.classList.add('is-unlocking');
+                homeScreen.classList.add('is-visible');
+                homeScreen.setAttribute('aria-hidden', 'false');
+            }
+            function showPhoneToast(appName) {
+                const toast = $('#phone-toast');
+                toast.textContent = `${appName} belum tersedia — UI fitur menyusul`;
+                toast.classList.add('is-visible');
+                clearTimeout(toastTimer);
+                toastTimer = setTimeout(() => toast.classList.remove('is-visible'), 1700);
+            }
+            function updatePhoneClock() {
+                const now = new Date();
+                const time = new Intl.DateTimeFormat('id-ID', {hour: '2-digit', minute: '2-digit', hour12: false}).format(now);
+                $('#lock-time').textContent = time;
+                $('#phone-status-time').textContent = time;
+                $('#lock-date').textContent = new Intl.DateTimeFormat('id-ID', {weekday: 'long', day: 'numeric', month: 'long'}).format(now);
+            }
+            function closeAll() { hideLayer(wheelLayer); hideLayer(phoneLayer); }
+
+            $('#panel-trigger').addEventListener('click', openWheel);
+            $('#phone-trigger').addEventListener('click', openPhone);
+            $('#wheel-close').addEventListener('click', () => hideLayer(wheelLayer));
+            $('#phone-close').addEventListener('click', () => hideLayer(phoneLayer));
+            wheelLayer.addEventListener('click', event => { if (event.target === wheelLayer) hideLayer(wheelLayer); });
+            phoneLayer.addEventListener('click', event => { if (event.target === phoneLayer) hideLayer(phoneLayer); });
+            $$('.wheel-item').forEach(item => item.addEventListener('click', () => {
+                $$('.wheel-item').forEach(other => other.classList.toggle('is-selected', other === item));
+                const names = {inventory: 'Inventory', property: 'Property', animation: 'Animasi', vehicle: 'Kendaraan'};
+                $('#wheel-selection').textContent = names[item.dataset.item] || 'Menu';
+                $('#wheel-hint').textContent = 'UI fitur menyusul';
+            }));
+            $$('.phone-app').forEach(app => app.addEventListener('click', () => showPhoneToast(app.dataset.app || 'Aplikasi')));
+            $('#home-indicator').addEventListener('click', () => {
+                if (homeScreen.classList.contains('is-visible')) {
+                    homeScreen.classList.remove('is-visible');
+                    homeScreen.setAttribute('aria-hidden', 'true');
+                    lockScreen.classList.remove('is-unlocking');
                 } else {
-                    box.style.display = "none";
+                    hideLayer(phoneLayer);
                 }
             });
-        }
+            document.addEventListener('keydown', event => { if (event.key === 'Escape') closeAll(); });
+            swipeArea.addEventListener('pointerdown', event => {
+                swipeStart = {y: event.clientY, x: event.clientX, pointerId: event.pointerId};
+                swipeArea.setPointerCapture(event.pointerId);
+                event.preventDefault();
+            });
+            swipeArea.addEventListener('pointermove', event => {
+                if (!swipeStart || swipeStart.pointerId !== event.pointerId) return;
+                const dy = event.clientY - swipeStart.y;
+                swipeHandle.style.transform = `translateY(${Math.max(-48, Math.min(0, dy))}px)`;
+                event.preventDefault();
+            });
+            const finishSwipe = event => {
+                if (!swipeStart || swipeStart.pointerId !== event.pointerId) return;
+                const dy = event.clientY - swipeStart.y;
+                swipeHandle.style.transform = '';
+                if (dy < -54) unlockPhone();
+                swipeStart = null;
+            };
+            swipeArea.addEventListener('pointerup', finishSwipe);
+            swipeArea.addEventListener('pointercancel', finishSwipe);
+
+            // CEF events emitted from Pawn; keep the original HUD behavior intact.
+            if (window.cef) {
+                cef.on('updateStats', (money, health, armour) => {
+                    $('#hud-money').textContent = '$' + Number(money).toLocaleString('en-US');
+                    const hp = Math.max(0, Math.min(100, Number(health) || 0));
+                    const ar = Math.max(0, Math.min(100, Number(armour) || 0));
+                    $('#hud-health').style.width = hp + '%';
+                    $('#health-val').textContent = Math.round(hp) + '%';
+                    $('#hud-armour').style.width = ar + '%';
+                    $('#armour-val').textContent = Math.round(ar) + '%';
+                });
+                cef.on('updateSpeed', (speed, inVehicle) => {
+                    const box = $('#speedo-box');
+                    box.style.display = inVehicle ? 'flex' : 'none';
+                    if (inVehicle) $('#speed-val').textContent = Math.max(0, Math.round(Number(speed) || 0));
+                });
+            }
+            updatePhoneClock();
+            setInterval(updatePhoneClock, 15000);
+        })();
     </script>
 </body>
 </html>
